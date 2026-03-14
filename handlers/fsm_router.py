@@ -6,8 +6,7 @@ Registered LAST in handlers/__init__.py so all command/callback handlers take pr
 
 Priority order (text messages):
   1. Upload title edit  (video._pending_edit)
-  2. AI metadata hint   (ai._ai_states  STATE_WAIT_HINT)
-  3. Manage FSM         (manage._states  edit/schedule/playlist/caption)
+  2. Manage FSM         (manage._states  edit/schedule/playlist/caption)
 
 Priority order (document messages):
   1. Manage caption SRT (manage._states STATE_CAPTION_FILE)
