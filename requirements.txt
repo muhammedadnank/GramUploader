@@ -1,0 +1,24 @@
+# Telegram
+kurigram
+
+# Database
+motor
+pymongo
+
+# Google / YouTube
+google-auth
+google-auth-oauthlib
+google-api-python-client
+
+# OAuth2 server
+fastapi
+uvicorn
+
+# Utils
+python-dotenv
+pydantic
+
+# AI
+google-generativeai
+openai-whisper
+ffmpeg-python
