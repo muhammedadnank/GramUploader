@@ -26,10 +26,13 @@ async def _fetch_stats() -> dict:
     success_rate = (done / total_uploads * 100) if total_uploads > 0 else 0
     keys = await apikey_repo.list_all()
     active_keys = sum(1 for k in keys if k.get("active") and k.get("units_used", 0) < 8000)
+    # UPGRADE #9: include live queue size
+    from services.queue_worker import queue_size
     return dict(
         total_users=total_users, connected=connected,
         total_uploads=total_uploads, uploads_today=uploads_today,
-        success_rate=success_rate, active_keys=active_keys
+        success_rate=success_rate, active_keys=active_keys,
+        queue_size=queue_size()
     )
 
 
@@ -189,15 +192,16 @@ def register(app: Client):
 
     @app.on_callback_query(filters.regex("^broadcast_confirm$") & is_admin)
     async def broadcast_do(client: Client, cq: CallbackQuery):
+        await cq.answer()  # FIX #4
         source_msg = _broadcast_msg.pop(cq.from_user.id, None)
         if not source_msg:
             await cq.message.edit_text("❌ No broadcast message found. Use /broadcast again.")
             return
 
         await cq.message.edit_text("📢 Broadcasting... please wait.")
-        user_ids = await user_repo.get_all_ids()
         success, failed = 0, 0
-        for uid in user_ids:
+        # FIX #12: stream IDs one at a time — no full list in RAM
+        async for uid in user_repo.iter_all_ids():
             try:
                 await source_msg.forward(uid)
                 success += 1
@@ -219,11 +223,13 @@ def register(app: Client):
 
     @app.on_callback_query(filters.regex("^broadcast_cancel$") & is_admin)
     async def broadcast_cancel(client: Client, cq: CallbackQuery):
+        await cq.answer()  # FIX #4
         _broadcast_msg.pop(cq.from_user.id, None)
         await cq.message.edit_text("❌ Broadcast cancelled.")
 
     @app.on_callback_query(filters.regex("^admin_stats$") & is_admin)
     async def cb_admin_stats(client: Client, cq: CallbackQuery):
+        await cq.answer()  # FIX #4
         s = await _fetch_stats()
         try:
             await cq.message.edit_text(
@@ -236,6 +242,7 @@ def register(app: Client):
 
     @app.on_callback_query(filters.regex("^admin_broadcast$") & is_admin)
     async def cb_admin_broadcast(client: Client, cq: CallbackQuery):
+        await cq.answer()  # FIX #4
         await cq.message.edit_text(
             "📢 <b>Broadcast</b>\n\n"
             "Reply to any message with /broadcast to send it to all users.\n\n"
@@ -246,6 +253,7 @@ def register(app: Client):
 
     @app.on_callback_query(filters.regex("^admin_keys$") & is_admin)
     async def cb_admin_keys(client: Client, cq: CallbackQuery):
+        await cq.answer()  # FIX #4
         keys = await apikey_repo.list_all()
         if not keys:
             text = "🔑 <b>API Keys</b>\n\nNo keys added yet.\nUse /addkey <key> to add one."
@@ -298,7 +306,7 @@ def register(app: Client):
         uploads_today = await user_repo.get_uploads_today(target_id)
         total_uploads = await upload_repo.count_by_user(target_id)
         await cq.message.edit_reply_markup(
-            Keyboards.admin_user(target_id, True, user.plan.value if user else "free")
+            Keyboards.admin_user(target_id, True, user.plan if user else "free")
         )
 
     @app.on_callback_query(filters.regex(r"^admin_unban_user:(\d+)$") & is_admin)
@@ -308,7 +316,7 @@ def register(app: Client):
         await cq.answer(f"✅ User {target_id} unbanned.")
         user = await user_repo.find(target_id)
         await cq.message.edit_reply_markup(
-            Keyboards.admin_user(target_id, False, user.plan.value if user else "free")
+            Keyboards.admin_user(target_id, False, user.plan if user else "free")
         )
 
     @app.on_callback_query(filters.regex(r"^admin_set_premium:(\d+)$") & is_admin)
