@@ -1,6 +1,6 @@
 from motor.motor_asyncio import AsyncIOMotorCollection
 from database.models import Upload, UploadStatus
-from datetime import datetime, date
+from datetime import datetime
 from typing import Optional
 from bson import ObjectId
 
@@ -24,7 +24,9 @@ class UploadRepository:
             {"$set": data}
         )
 
-    async def set_status(self, upload_id: ObjectId, status: UploadStatus, extra: dict = {}):
+    async def set_status(self, upload_id: ObjectId, status: UploadStatus, extra: dict = None):
+        # FIX: was `extra: dict = {}` — mutable default argument
+        extra = extra or {}
         await self.col.update_one(
             {"_id": upload_id},
             {"$set": {"status": status.value, **extra}}
@@ -36,6 +38,13 @@ class UploadRepository:
         ).sort("created_at", -1).limit(limit)
         docs = await cursor.to_list(length=limit)
         return [Upload(**d) for d in docs]
+
+    async def get_stuck_jobs(self) -> list[dict]:
+        """Return uploads stuck in PENDING or DOWNLOADING (e.g. after a crash)."""
+        cursor = self.col.find({
+            "status": {"$in": [UploadStatus.PENDING.value, UploadStatus.DOWNLOADING.value]}
+        })
+        return await cursor.to_list(length=None)
 
     async def count(self) -> int:
         return await self.col.count_documents({})
