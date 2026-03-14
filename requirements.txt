@@ -12,14 +12,19 @@ google-api-python-client
 
 # OAuth2 server
 fastapi
-uvicorn
+uvicorn[standard]
 
 # Utils
 python-dotenv
 pydantic
-
-# AI
 psutil
+
+# AI — metadata (always installed)
 google-generativeai
-openai-whisper
-ffmpeg-python
+
+# AI — Whisper captions (optional — pulls ~2.5GB torch)
+# Uncomment only if you have enough disk space during build (local or Azure).
+# On Render free tier, leave this commented — AI captions will show a clear
+# error message if a user tries to use them.
+# openai-whisper
+# ffmpeg-python
