@@ -138,9 +138,6 @@ def register(app: Client):
             "chat_id": data["chat_id"],
             "title": data["title"],
             "privacy": data["privacy"],
-            # Pass along AI-generated metadata if present
-            "description": data.get("ai_description", ""),
-            "tags": data.get("ai_tags", []),
         })
 
         await cq.message.edit_text(
