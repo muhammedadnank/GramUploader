@@ -1,3 +1,5 @@
+import asyncio
+import time
 from pyrogram import Client, filters
 from pyrogram.types import Message, CallbackQuery
 from database.db import user_repo, upload_repo
@@ -11,8 +13,91 @@ from utils.formatters import format_size
 from utils.logger import log
 from config import Config
 
-# Temp store for pending confirmations {message_id: upload_data}
+# Temp store for pending confirmations {pending_key: {data..., _ts: float}}
 _pending: dict = {}
+
+# TTL for pending confirmations (10 minutes)
+_PENDING_TTL = 600
+
+
+def _cleanup_pending():
+    """Remove expired pending entries."""
+    now = time.time()
+    expired = [k for k, v in _pending.items() if now - v.get("_ts", 0) > _PENDING_TTL]
+    for k in expired:
+        _pending.pop(k, None)
+
+
+async def handle_video_upload(client: Client, message: Message):
+    """
+    Core video upload logic — callable from fsm_router when a document is
+    received and no FSM state matches.
+    """
+    if not await apply_middlewares(client, message):
+        return
+
+    user = await user_repo.find(message.from_user.id)
+
+    # YouTube connected check
+    if not user or not user.youtube_connected:
+        await message.reply(
+            Messages.not_connected(),
+            reply_markup=Keyboards.connect(message.from_user.id),
+            parse_mode="html"
+        )
+        return
+
+    # Daily quota check
+    uploads_today = await user_repo.get_uploads_today(message.from_user.id)
+    plan = user.plan.value
+    if plan == "free" and uploads_today >= Config.FREE_UPLOADS_PER_DAY:
+        await message.reply(
+            Messages.daily_limit(Config.FREE_UPLOADS_PER_DAY),
+            reply_markup=Keyboards.premium(),
+            parse_mode="html"
+        )
+        return
+
+    media = message.video or message.document
+
+    # Size check
+    if not is_within_size_limit(media.file_size or 0):
+        await message.reply(
+            Messages.file_too_large(media.file_size or 0, Config.MAX_FILE_SIZE_MB),
+            parse_mode="html"
+        )
+        return
+
+    user_settings = user.get_settings() if user else {}
+    default_privacy = user_settings.get("privacy", "public")
+
+    raw_title = (
+        message.caption
+        or (media.file_name if hasattr(media, "file_name") else None)
+        or f"Video_{message.id}"
+    )
+    title = sanitize_title(raw_title)
+
+    # Cleanup stale pending entries
+    _cleanup_pending()
+
+    pending_key = f"{message.from_user.id}:{message.id}"
+    _pending[pending_key] = {
+        "telegram_id": message.from_user.id,
+        "message_id": message.id,
+        "chat_id": message.chat.id,
+        "file_id": media.file_id,
+        "title": title,
+        "size": media.file_size or 0,
+        "privacy": default_privacy,
+        "_ts": time.time(),
+    }
+
+    await message.reply(
+        Messages.upload_confirm(title, media.file_size or 0, default_privacy),
+        reply_markup=Keyboards.upload_confirm(pending_key),
+        parse_mode="html"
+    )
 
 
 def register(app: Client):
@@ -21,71 +106,12 @@ def register(app: Client):
         (filters.video | filters.document) & filters.private
     )
     async def handle_video(client: Client, message: Message):
-        if not await apply_middlewares(client, message):
-            return
-
-        user = await user_repo.find(message.from_user.id)
-
-        # YouTube connected check
-        if not user or not user.youtube_connected:
-            await message.reply(
-                Messages.not_connected(),
-                reply_markup=Keyboards.connect(message.from_user.id),
-                parse_mode="html"
-            )
-            return
-
-        # Daily quota check
-        uploads_today = await user_repo.get_uploads_today(message.from_user.id)
-        plan = user.plan.value
-        if plan == "free" and uploads_today >= Config.FREE_UPLOADS_PER_DAY:
-            await message.reply(
-                Messages.daily_limit(Config.FREE_UPLOADS_PER_DAY),
-                reply_markup=Keyboards.premium(),
-                parse_mode="html"
-            )
-            return
-
-        media = message.video or message.document
-
-        # Size check
-        if not is_within_size_limit(media.file_size or 0):
-            await message.reply(
-                Messages.file_too_large(media.file_size or 0, Config.MAX_FILE_SIZE_MB),
-                parse_mode="html"
-            )
-            return
-
-        # Get user settings
-        user_settings = user.get_settings() if user else {}
-        default_privacy = user_settings.get("privacy", "public")
-
-        # Build title
-        raw_title = (
-            message.caption
-            or (media.file_name if hasattr(media, "file_name") else None)
-            or f"Video_{message.id}"
-        )
-        title = sanitize_title(raw_title)
-
-        # Store pending
-        pending_key = f"{message.from_user.id}:{message.id}"
-        _pending[pending_key] = {
-            "telegram_id": message.from_user.id,
-            "message_id": message.id,
-            "chat_id": message.chat.id,
-            "file_id": media.file_id,
-            "title": title,
-            "size": media.file_size or 0,
-            "privacy": default_privacy,
-        }
-
-        # Show confirmation screen
-        await message.reply(
-            Messages.upload_confirm(title, media.file_size or 0, default_privacy),
-            reply_markup=Keyboards.upload_confirm(pending_key),
-            parse_mode="html"
-        )
+        # fsm_router handles documents when FSM state is active.
+        # For plain video messages (filters.video) always route here.
+        # For documents with no active FSM state, fsm_router calls handle_video_upload directly.
+        if message.video:
+            await handle_video_upload(client, message)
+        # documents: fsm_router will call handle_video_upload after checking FSM state
 
     # ─── CONFIRMATION CALLBACKS ─────────────────────────────────
 
@@ -99,7 +125,6 @@ def register(app: Client):
             await cq.message.delete()
             return
 
-        # Create upload record
         upload = Upload(
             telegram_id=data["telegram_id"],
             file_id=data["file_id"],
@@ -109,10 +134,7 @@ def register(app: Client):
         upload_id = await upload_repo.create(upload)
         await user_repo.increment_uploads_today(data["telegram_id"])
 
-        # Queue position
         position = queue_size() + 1
-
-        # Add to queue
         enqueue({
             "telegram_id": data["telegram_id"],
             "upload_id": upload_id,
@@ -147,14 +169,11 @@ def register(app: Client):
     async def cb_set_privacy(client: Client, cq: CallbackQuery):
         privacy = cq.matches[0].group(1)
         pending_key = cq.matches[0].group(2)
-
         if pending_key not in _pending:
             await cq.answer("Session expired.", show_alert=True)
             return
-
         _pending[pending_key]["privacy"] = privacy
         data = _pending[pending_key]
-
         await cq.message.edit_text(
             Messages.upload_confirm(data["title"], data["size"], privacy),
             reply_markup=Keyboards.upload_confirm(pending_key),
@@ -174,3 +193,33 @@ def register(app: Client):
             reply_markup=Keyboards.upload_confirm(pending_key),
             parse_mode="html"
         )
+
+    # ─── EDIT TITLE inline (before upload) ──────────────────────
+
+    @app.on_callback_query(filters.regex(r"^upload_edit_title:(.+)$"))
+    async def cb_upload_edit_title(client: Client, cq: CallbackQuery):
+        pending_key = cq.matches[0].group(1)
+        if pending_key not in _pending:
+            await cq.answer("Session expired.", show_alert=True)
+            return
+        # Store edit-title state for this user in manage FSM
+        from handlers.manage import set_state
+        # Reuse a dedicated lightweight state key
+        from handlers.video import _pending as pnd
+        # Signal the fsm_router that we're in "edit upload title" mode
+        _pending[pending_key]["_edit_title"] = True
+        await cq.message.edit_text(
+            f"✏️ <b>Edit Title</b>\n\n"
+            f"Current: <code>{_pending[pending_key]['title'][:80]}</code>\n\n"
+            f"Send the new title as a message.\nSend /cancel to abort.",
+            parse_mode="html"
+        )
+        # Use a dedicated per-user edit state in _pending_edit
+        _pending_edit[cq.from_user.id] = pending_key
+
+    # per-user dict mapping user_id -> pending_key for title-edit FSM
+    # (Accessed from fsm_router below via handlers.video._pending_edit)
+
+
+# Module-level dict for upload title edit FSM state
+_pending_edit: dict = {}
