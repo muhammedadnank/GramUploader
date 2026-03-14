@@ -19,6 +19,7 @@ python-dotenv
 pydantic
 
 # AI
+psutil
 google-generativeai
 openai-whisper
 ffmpeg-python
