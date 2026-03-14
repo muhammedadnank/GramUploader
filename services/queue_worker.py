@@ -53,7 +53,9 @@ async def process_job(app: Client, job: dict):
     message_id = job["message_id"]
     chat_id = job["chat_id"]
     title = job["title"]
-    privacy = job.get("privacy", "public")  # FIX: was missing privacy param
+    privacy = job.get("privacy", "public")
+    description = job.get("description", "")
+    tags = job.get("tags", [])
 
     status_msg = await app.send_message(
         chat_id,
@@ -117,11 +119,13 @@ async def process_job(app: Client, job: dict):
                 pass
             await upload_repo.update(upload_id, {"progress_upload": percent})
 
-    # Upload to YouTube — pass privacy
+    # Upload to YouTube
     video_id = await upload_to_youtube(
         telegram_id=telegram_id,
         file_path=file_path,
         title=title,
+        description=description,
+        tags=tags,
         privacy=privacy,
         progress_callback=upload_progress
     )
