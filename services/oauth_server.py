@@ -79,14 +79,14 @@ async def callback(request: Request):
         log.info(f"YouTube connected for user {telegram_id}")
 
         return HTMLResponse("""
-            <html>
+            <HTML>
             <head><meta charset="utf-8"></head>
             <body style="font-family:sans-serif;text-align:center;padding:60px;background:#0f0f0f;color:#fff">
                 <h2>✅ YouTube Connected!</h2>
                 <p style="color:#aaa">Go back to Telegram and send a video to upload.</p>
                 <p style="margin-top:30px;font-size:13px;color:#555">You can close this window.</p>
             </body>
-            </html>
+            </HTML>
         """)
 
     except Exception as e:
