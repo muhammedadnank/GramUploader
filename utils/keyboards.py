@@ -161,7 +161,10 @@ class Keyboards:
             ],
             [
                 InlineKeyboardButton("🔄 Refresh Stats", callback_data="admin_stats"),
-            ]
+            ],
+            [
+                InlineKeyboardButton("« Back", callback_data="back_start"),
+            ],
         ])
 
     @staticmethod
@@ -171,6 +174,29 @@ class Keyboards:
                 InlineKeyboardButton("✅ Yes, Send", callback_data="broadcast_confirm"),
                 InlineKeyboardButton("❌ Cancel", callback_data="broadcast_cancel"),
             ]
+        ])
+
+    @staticmethod
+    def admin_back() -> InlineKeyboardMarkup:
+        return InlineKeyboardMarkup([[
+            InlineKeyboardButton("« Back to Admin", callback_data="admin_stats")
+        ]])
+
+    @staticmethod
+    def admin_user(user_id: int, is_banned: bool, plan: str) -> InlineKeyboardMarkup:
+        ban_btn = (
+            InlineKeyboardButton("✅ Unban", callback_data=f"admin_unban_user:{user_id}")
+            if is_banned else
+            InlineKeyboardButton("🚫 Ban", callback_data=f"admin_ban_user:{user_id}")
+        )
+        plan_btn = (
+            InlineKeyboardButton("🆓 Set Free", callback_data=f"admin_set_free:{user_id}")
+            if plan == "premium" else
+            InlineKeyboardButton("💎 Set Premium", callback_data=f"admin_set_premium:{user_id}")
+        )
+        return InlineKeyboardMarkup([
+            [ban_btn, plan_btn],
+            [InlineKeyboardButton("« Back to Admin", callback_data="admin_stats")],
         ])
 
     # ─── PREMIUM ────────────────────────────────────────────────

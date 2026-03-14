@@ -57,3 +57,6 @@ class UploadRepository:
 
     async def count_by_status(self, status: UploadStatus) -> int:
         return await self.col.count_documents({"status": status.value})
+
+    async def count_by_user(self, telegram_id: int) -> int:
+        return await self.col.count_documents({"telegram_id": telegram_id})

@@ -75,9 +75,11 @@ class UserRepository:
         )
 
     async def ban(self, telegram_id: int, banned: bool = True):
+        # upsert=True so ban works even if user has never started the bot
         await self.col.update_one(
             {"_id": telegram_id},
-            {"$set": {"is_banned": banned}}
+            {"$set": {"is_banned": banned}},
+            upsert=True
         )
 
     async def count(self) -> int:

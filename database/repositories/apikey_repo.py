@@ -9,6 +9,9 @@ class APIKeyRepository:
     def __init__(self, collection: AsyncIOMotorCollection):
         self.col = collection
 
+    async def find_by_key(self, key: str) -> Optional[dict]:
+        return await self.col.find_one({"key": key})
+
     async def get_active(self) -> Optional[dict]:
         return await self.col.find_one({
             "active": True,

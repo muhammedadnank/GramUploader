@@ -208,6 +208,34 @@ class Messages:
             f"✏️ Auto-title from caption: <b>{'ON' if auto_title else 'OFF'}</b>"
         )
 
+    @staticmethod
+    def admin_user_info(user, uploads_today: int, total_uploads: int) -> str:
+        plan = user.plan.value.capitalize()
+        status = "🚫 Banned" if user.is_banned else "✅ Active"
+        connected = "✅ Yes" if user.youtube_connected else "❌ No"
+        name = user.first_name or "—"
+        username = f"@{user.username}" if user.username else "—"
+        return (
+            f"👤 <b>User Info</b>
+
+"
+            f"ID: <code>{user.id}</code>
+"
+            f"Name: <b>{name}</b>
+"
+            f"Username: {username}
+"
+            f"Plan: <b>{plan}</b>
+"
+            f"Status: {status}
+"
+            f"YouTube: {connected}
+"
+            f"Uploads Today: <b>{uploads_today}</b>
+"
+            f"Total Uploads: <b>{total_uploads}</b>"
+        )
+
     # ─── ERRORS ─────────────────────────────────────────────────
 
     @staticmethod
