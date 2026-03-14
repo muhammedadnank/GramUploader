@@ -1,6 +1,9 @@
 """
 /manage handler — YouTube Studio-like panel
 Full video management: edit, delete, thumbnail, captions, playlists, stats
+
+FSM text/photo/document handling has been moved to handlers/fsm_router.py
+to avoid Pyrogram handler conflicts.
 """
 
 from pyrogram import Client, filters
@@ -21,13 +24,13 @@ from utils.logger import log
 # FSM state store: {user_id: {state, video_id, ...}}
 _states: dict = {}
 
-STATE_EDIT_TITLE = "edit_title"
-STATE_EDIT_DESC = "edit_desc"
-STATE_EDIT_TAGS = "edit_tags"
-STATE_THUMBNAIL = "thumbnail"
+STATE_EDIT_TITLE   = "edit_title"
+STATE_EDIT_DESC    = "edit_desc"
+STATE_EDIT_TAGS    = "edit_tags"
+STATE_THUMBNAIL    = "thumbnail"
 STATE_CAPTION_FILE = "caption_file"
 STATE_CAPTION_LANG = "caption_lang"
-STATE_SCHEDULE = "schedule"
+STATE_SCHEDULE     = "schedule"
 STATE_NEW_PLAYLIST = "new_playlist"
 
 
@@ -51,19 +54,16 @@ def register(app: Client):
     async def manage(client: Client, message: Message):
         if not await apply_middlewares(client, message):
             return
-
         msg = await message.reply("⏳ Fetching your videos...")
         try:
             data = await get_my_videos(message.from_user.id)
             videos = data["items"]
-
             if not videos:
                 await msg.edit_text(
                     "📭 <b>No videos found.</b>\n\nUpload a video first!",
                     parse_mode="html"
                 )
                 return
-
             await msg.edit_text(
                 ManagerMessages.video_list_header(len(videos)),
                 reply_markup=ManagerKeyboards.video_list(
@@ -139,10 +139,7 @@ def register(app: Client):
         video = await get_video_details(cq.from_user.id, video_id)
         current = video["snippet"]["title"]
         set_state(cq.from_user.id, STATE_EDIT_TITLE, video_id=video_id)
-        await cq.message.edit_text(
-            ManagerMessages.edit_prompt("Title", current),
-            parse_mode="html"
-        )
+        await cq.message.edit_text(ManagerMessages.edit_prompt("Title", current), parse_mode="html")
 
     # ─── EDIT DESCRIPTION ───────────────────────────────────────
 
@@ -152,10 +149,7 @@ def register(app: Client):
         video = await get_video_details(cq.from_user.id, video_id)
         current = video["snippet"].get("description", "")
         set_state(cq.from_user.id, STATE_EDIT_DESC, video_id=video_id)
-        await cq.message.edit_text(
-            ManagerMessages.edit_prompt("Description", current),
-            parse_mode="html"
-        )
+        await cq.message.edit_text(ManagerMessages.edit_prompt("Description", current), parse_mode="html")
 
     # ─── EDIT TAGS ──────────────────────────────────────────────
 
@@ -165,10 +159,7 @@ def register(app: Client):
         video = await get_video_details(cq.from_user.id, video_id)
         current_tags = ", ".join(video["snippet"].get("tags", []))
         set_state(cq.from_user.id, STATE_EDIT_TAGS, video_id=video_id)
-        await cq.message.edit_text(
-            ManagerMessages.edit_prompt("Tags", current_tags or "No tags"),
-            parse_mode="html"
-        )
+        await cq.message.edit_text(ManagerMessages.edit_prompt("Tags", current_tags or "No tags"), parse_mode="html")
 
     # ─── PRIVACY ────────────────────────────────────────────────
 
@@ -234,10 +225,7 @@ def register(app: Client):
     async def cb_thumbnail(client: Client, cq: CallbackQuery):
         video_id = cq.matches[0].group(1)
         set_state(cq.from_user.id, STATE_THUMBNAIL, video_id=video_id)
-        await cq.message.edit_text(
-            ManagerMessages.thumbnail_prompt(video_id),
-            parse_mode="html"
-        )
+        await cq.message.edit_text(ManagerMessages.thumbnail_prompt(video_id), parse_mode="html")
 
     # ─── PLAYLISTS ──────────────────────────────────────────────
 
@@ -308,10 +296,7 @@ def register(app: Client):
     async def cb_upload_caption(client: Client, cq: CallbackQuery):
         video_id = cq.matches[0].group(1)
         set_state(cq.from_user.id, STATE_CAPTION_FILE, video_id=video_id)
-        await cq.message.edit_text(
-            ManagerMessages.caption_prompt(),
-            parse_mode="html"
-        )
+        await cq.message.edit_text(ManagerMessages.caption_prompt(), parse_mode="html")
 
     @app.on_callback_query(filters.regex(r"^mgr_del_caption:([^:]+):(.+)$"))
     async def cb_del_caption(client: Client, cq: CallbackQuery):
@@ -337,7 +322,7 @@ def register(app: Client):
         video = await get_video_details(cq.from_user.id, video_id)
         status = video["status"]
         await cq.message.edit_text(
-            f"⚙️ <b>Advanced Settings</b>",
+            "⚙️ <b>Advanced Settings</b>",
             reply_markup=ManagerKeyboards.advanced(video_id, status),
             parse_mode="html"
         )
@@ -350,9 +335,7 @@ def register(app: Client):
         await update_video(cq.from_user.id, video_id, {"madeForKids": not current})
         await cq.answer(f"Made for Kids: {'ON' if not current else 'OFF'}")
         video = await get_video_details(cq.from_user.id, video_id)
-        await cq.message.edit_reply_markup(
-            ManagerKeyboards.advanced(video_id, video["status"])
-        )
+        await cq.message.edit_reply_markup(ManagerKeyboards.advanced(video_id, video["status"]))
 
     @app.on_callback_query(filters.regex(r"^mgr_toggle_embed:(.+)$"))
     async def cb_toggle_embed(client: Client, cq: CallbackQuery):
@@ -362,9 +345,7 @@ def register(app: Client):
         await update_video(cq.from_user.id, video_id, {"embeddable": not current})
         await cq.answer(f"Embeddable: {'ON' if not current else 'OFF'}")
         video = await get_video_details(cq.from_user.id, video_id)
-        await cq.message.edit_reply_markup(
-            ManagerKeyboards.advanced(video_id, video["status"])
-        )
+        await cq.message.edit_reply_markup(ManagerKeyboards.advanced(video_id, video["status"]))
 
     @app.on_callback_query(filters.regex(r"^mgr_toggle_license:(.+)$"))
     async def cb_toggle_license(client: Client, cq: CallbackQuery):
@@ -375,18 +356,13 @@ def register(app: Client):
         await update_video(cq.from_user.id, video_id, {"license": new_lic})
         await cq.answer(f"License: {'CC' if new_lic == 'creativeCommon' else 'Standard'}")
         video = await get_video_details(cq.from_user.id, video_id)
-        await cq.message.edit_reply_markup(
-            ManagerKeyboards.advanced(video_id, video["status"])
-        )
+        await cq.message.edit_reply_markup(ManagerKeyboards.advanced(video_id, video["status"]))
 
     @app.on_callback_query(filters.regex(r"^mgr_schedule:(.+)$"))
     async def cb_schedule(client: Client, cq: CallbackQuery):
         video_id = cq.matches[0].group(1)
         set_state(cq.from_user.id, STATE_SCHEDULE, video_id=video_id)
-        await cq.message.edit_text(
-            ManagerMessages.schedule_prompt(),
-            parse_mode="html"
-        )
+        await cq.message.edit_text(ManagerMessages.schedule_prompt(), parse_mode="html")
 
     # ─── STATS ──────────────────────────────────────────────────
 
@@ -395,7 +371,6 @@ def register(app: Client):
         video_id = cq.matches[0].group(1)
         video = await get_video_details(cq.from_user.id, video_id)
         stats = video.get("statistics", {})
-
         await cq.message.edit_text(
             f"📊 <b>Video Statistics</b>\n\n"
             f"👁 Views: <b>{format_count(stats.get('viewCount', 0))}</b>\n"
@@ -428,109 +403,6 @@ def register(app: Client):
             video = await get_video_details(cq.from_user.id, video_id)
             title = video["snippet"]["title"]
             await delete_video(cq.from_user.id, video_id)
-            await cq.message.edit_text(
-                ManagerMessages.delete_done(title),
-                parse_mode="html"
-            )
+            await cq.message.edit_text(ManagerMessages.delete_done(title), parse_mode="html")
         except Exception as e:
             await cq.answer(f"❌ {e}", show_alert=True)
-
-    # ─── FSM TEXT HANDLER ───────────────────────────────────────
-
-    @app.on_message(filters.text & filters.private)
-    async def fsm_text(client: Client, message: Message):
-        state_data = get_state(message.from_user.id)
-        if not state_data:
-            return
-
-        state = state_data.get("state")
-        video_id = state_data.get("video_id")
-        text = message.text.strip()
-
-        if text == "/cancel":
-            clear_state(message.from_user.id)
-            await message.reply("❌ Cancelled.")
-            return
-
-        try:
-            if state == STATE_EDIT_TITLE:
-                await update_video(message.from_user.id, video_id, {"title": text})
-                clear_state(message.from_user.id)
-                await message.reply(ManagerMessages.update_success("Title"), parse_mode="html")
-
-            elif state == STATE_EDIT_DESC:
-                await update_video(message.from_user.id, video_id, {"description": text})
-                clear_state(message.from_user.id)
-                await message.reply(ManagerMessages.update_success("Description"), parse_mode="html")
-
-            elif state == STATE_EDIT_TAGS:
-                tags = [t.strip() for t in text.split(",") if t.strip()]
-                await update_video(message.from_user.id, video_id, {"tags": tags})
-                clear_state(message.from_user.id)
-                await message.reply(ManagerMessages.update_success("Tags"), parse_mode="html")
-
-            elif state == STATE_CAPTION_LANG:
-                srt_path = state_data.get("srt_path")
-                await upload_caption(message.from_user.id, video_id, srt_path, language=text)
-                clear_state(message.from_user.id)
-                await message.reply(ManagerMessages.update_success("Caption"), parse_mode="html")
-
-            elif state == STATE_SCHEDULE:
-                from datetime import datetime, timezone
-                dt = datetime.strptime(text, "%Y-%m-%d %H:%M").replace(tzinfo=timezone.utc)
-                publish_at = dt.strftime("%Y-%m-%dT%H:%M:%S.000Z")
-                await update_video(message.from_user.id, video_id, {"publishAt": publish_at})
-                clear_state(message.from_user.id)
-                await message.reply(f"✅ Scheduled for <b>{text} UTC</b>", parse_mode="html")
-
-            elif state == STATE_NEW_PLAYLIST:
-                result = await create_playlist(message.from_user.id, title=text)
-                playlist_id = result["id"]
-                await add_to_playlist(message.from_user.id, video_id, playlist_id)
-                clear_state(message.from_user.id)
-                await message.reply(f"✅ Playlist <b>{text}</b> created and video added!", parse_mode="html")
-
-        except Exception as e:
-            clear_state(message.from_user.id)
-            await message.reply(f"❌ Error: {e}")
-
-    # ─── FSM PHOTO HANDLER (thumbnail) ──────────────────────────
-
-    @app.on_message(filters.photo & filters.private)
-    async def fsm_photo(client: Client, message: Message):
-        state_data = get_state(message.from_user.id)
-        if not state_data or state_data.get("state") != STATE_THUMBNAIL:
-            return
-
-        video_id = state_data.get("video_id")
-        msg = await message.reply("⏳ Setting thumbnail...")
-        try:
-            path = await message.download()
-            await set_thumbnail(message.from_user.id, video_id, path)
-            clear_state(message.from_user.id)
-            await msg.edit_text("✅ Thumbnail updated!")
-        except Exception as e:
-            clear_state(message.from_user.id)
-            await msg.edit_text(f"❌ {e}")
-
-    # ─── FSM DOCUMENT HANDLER (caption SRT) ─────────────────────
-
-    @app.on_message(filters.document & filters.private)
-    async def fsm_document(client: Client, message: Message):
-        state_data = get_state(message.from_user.id)
-        if not state_data or state_data.get("state") != STATE_CAPTION_FILE:
-            return
-
-        video_id = state_data.get("video_id")
-        fname = message.document.file_name or ""
-
-        if not fname.endswith(".srt"):
-            await message.reply("❌ Please send a .srt file.")
-            return
-
-        path = await message.download()
-        set_state(message.from_user.id, STATE_CAPTION_LANG, video_id=video_id, srt_path=path)
-        await message.reply(
-            ManagerMessages.caption_lang_prompt(),
-            parse_mode="html"
-        )
