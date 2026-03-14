@@ -47,7 +47,7 @@ def register(app: Client):
                 await message.reply(
                     Messages.upload_confirm(data["title"], data["size"], data["privacy"]),
                     reply_markup=Keyboards.upload_confirm(pending_key),
-                    parse_mode="html"
+                    parse_mode="HTML"
                 )
             else:
                 await message.reply("⚠️ Session expired. Please resend the video.")
@@ -76,7 +76,7 @@ def register(app: Client):
                         [InlineKeyboardButton("🔄 Regenerate", callback_data="ai_metadata_start")],
                         [InlineKeyboardButton("« Back", callback_data="back_start")],
                     ]),
-                    parse_mode="html"
+                    parse_mode="HTML"
                 )
             except Exception as e:
                 await msg.edit_text(f"❌ {e}")
@@ -107,24 +107,24 @@ def register(app: Client):
             if state == STATE_EDIT_TITLE:
                 await update_video(user_id, video_id, {"title": text})
                 clear_state(user_id)
-                await message.reply(ManagerMessages.update_success("Title"), parse_mode="html")
+                await message.reply(ManagerMessages.update_success("Title"), parse_mode="HTML")
 
             elif state == STATE_EDIT_DESC:
                 await update_video(user_id, video_id, {"description": text})
                 clear_state(user_id)
-                await message.reply(ManagerMessages.update_success("Description"), parse_mode="html")
+                await message.reply(ManagerMessages.update_success("Description"), parse_mode="HTML")
 
             elif state == STATE_EDIT_TAGS:
                 tags = [t.strip() for t in text.split(",") if t.strip()]
                 await update_video(user_id, video_id, {"tags": tags})
                 clear_state(user_id)
-                await message.reply(ManagerMessages.update_success("Tags"), parse_mode="html")
+                await message.reply(ManagerMessages.update_success("Tags"), parse_mode="HTML")
 
             elif state == STATE_CAPTION_LANG:
                 srt_path = state_data.get("srt_path")
                 await upload_caption(user_id, video_id, srt_path, language=text)
                 clear_state(user_id)
-                await message.reply(ManagerMessages.update_success("Caption"), parse_mode="html")
+                await message.reply(ManagerMessages.update_success("Caption"), parse_mode="HTML")
 
             elif state == STATE_SCHEDULE:
                 from datetime import datetime, timezone
@@ -134,13 +134,13 @@ def register(app: Client):
                     await message.reply(
                         "❌ Invalid format. Use <code>YYYY-MM-DD HH:MM</code>\n"
                         "Example: <code>2026-04-01 18:00</code>\n\nSend /cancel to abort.",
-                        parse_mode="html"
+                        parse_mode="HTML"
                     )
                     return
                 publish_at = dt.strftime("%Y-%m-%dT%H:%M:%S.000Z")
                 await update_video(user_id, video_id, {"publishAt": publish_at})
                 clear_state(user_id)
-                await message.reply(f"✅ Scheduled for <b>{text} UTC</b>", parse_mode="html")
+                await message.reply(f"✅ Scheduled for <b>{text} UTC</b>", parse_mode="HTML")
 
             elif state == STATE_NEW_PLAYLIST:
                 result = await create_playlist(user_id, title=text)
@@ -149,7 +149,7 @@ def register(app: Client):
                 clear_state(user_id)
                 await message.reply(
                     f"✅ Playlist <b>{text}</b> created and video added!",
-                    parse_mode="html"
+                    parse_mode="HTML"
                 )
 
         except Exception as e:
@@ -195,7 +195,7 @@ def register(app: Client):
             path = await message.download()
             set_state(user_id, STATE_CAPTION_LANG, video_id=video_id, srt_path=path)
             from utils.manage.messages import ManagerMessages
-            await message.reply(ManagerMessages.caption_lang_prompt(), parse_mode="html")
+            await message.reply(ManagerMessages.caption_lang_prompt(), parse_mode="HTML")
             return
 
         # ── 2. Fallback: normal video/document upload ───────────────────────
