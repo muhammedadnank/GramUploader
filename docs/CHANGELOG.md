@@ -5,6 +5,27 @@ Format: `[vX.Y.Z] — YYYY-MM-DD`
 
 ---
 
+## [v2.4.0] — 2026-03-14
+
+### Removed
+
+- **Gemini AI integration removed** — `google-generativeai` and all AI metadata generation
+  features have been removed to reduce dependencies and eliminate the external API dependency
+  on Gemini.
+  - `services/ai_service.py` — deleted entirely (`generate_metadata()`, `regenerate_title()`)
+  - `handlers/ai.py` — deleted entirely (`/ai` command, `cb_metadata_start`, `cb_ai_suggest`,
+    `cb_ai_apply_yt`, `cb_regen_title`, AI FSM state management)
+  - `handlers/__init__.py` — `ai` import and `ai.register(app)` removed
+  - `handlers/fsm_router.py` — `STATE_WAIT_HINT` AI FSM branch removed
+  - `handlers/start.py` — `cb_ai_menu` callback handler removed
+  - `utils/keyboards.py` — `🤖 AI Tools` button removed from start menu;
+    `upload_confirm()` simplified — `ai_applied` param, `✨ AI Suggest`, and `🔄 Regen Title`
+    buttons removed
+  - `config.py` — `GEMINI_API_KEY` env var removed
+  - `requirements.txt` — `google-generativeai` removed
+
+---
+
 ## [v2.3.0] — 2026-03-14
 
 ### Removed
@@ -52,7 +73,7 @@ Format: `[vX.Y.Z] — YYYY-MM-DD`
   `filters.document` handler for `.srt` caption uploads; `video.py` registered another for video
   uploads. A document sent while in `STATE_CAPTION_FILE` could be routed to the wrong handler.
   Resolved by the central `fsm_router.py` which checks FSM state before deciding whether to treat
-  a document as a caption file, a Whisper AI video, or a regular video upload.
+  a document as a caption file or a regular video upload.
 
 ### Bug Fixes
 
@@ -72,11 +93,6 @@ Format: `[vX.Y.Z] — YYYY-MM-DD`
 - **`increment_usage()` KeyError on missing `_id`** — `apikey_repo.get_active()` returns a raw MongoDB
   dict; if `_id` was somehow absent, `api_key_doc["_id"]` raised `KeyError`. Added
   `if key_id is None: return` guard in `increment_usage()`.
-
-- **Whisper audio path brittle string replacement** — audio extraction used
-  `.replace(".mp4", ".wav").replace(".mkv", ".wav")` which failed silently for any other extension
-  and produced wrong paths for files like `video.mp4.part`. Fixed with `os.path.splitext()`:
-  `base, _ = os.path.splitext(video_path); audio_path = base + "_audio.wav"`.
 
 - **Schedule FSM gave no format feedback** — invalid datetime input raised `ValueError` caught by the
   outer `except Exception`, giving users a cryptic `❌ Error: ...` message. Now catches `ValueError`
@@ -126,7 +142,6 @@ Format: `[vX.Y.Z] — YYYY-MM-DD`
 - `utils/manager_messages.py` → moved to `utils/manage/messages.py`
 - `utils/manage/__init__.py` created
 - `handlers/video_handler.py` (old v1 leftover) deleted
-- Junk folder `{handlers,services,database,utils}/` deleted
 - All imports updated to reflect new paths
 
 ### Render Deploy Support
@@ -135,14 +150,13 @@ Format: `[vX.Y.Z] — YYYY-MM-DD`
 - `Procfile` fixed — was `cmd1 & cmd2` (broken); now `web: python main.py`
 - `config.py` — `OAUTH_SERVER_PORT` now reads `$PORT` env var first (required by Render)
 - `Dockerfile` — added `ffmpeg`, `g++`, `python3-dev`; created `/app/logs` dir
-- `services/ai_service.py` — RAM availability check before loading Whisper model; lazy import with clear error if `openai-whisper` not installed
 - `requirements.txt` — added `psutil` for RAM check
 
 ### Local Deploy Support
 
 - `setup_local.sh` added — installs `ffmpeg`, creates `venv`, validates `.env`, creates `downloads/` and `logs/` dirs
 - `run.sh` added — activates `venv` and starts bot
-- `utils/logger.py` — log file path changed from relative `bot.log` to absolute `logs/bot.log` inside project root (fixes wrong location when running from different directories)
+- `utils/logger.py` — log file path changed from relative `bot.log` to absolute `logs/bot.log` inside project root
 
 ---
 
@@ -163,13 +177,11 @@ Format: `[vX.Y.Z] — YYYY-MM-DD`
 
 ### AI Features (`/ai`)
 
-- New `/ai` command with Gemini 1.5 Flash (free tier) + Whisper
+- New `/ai` command with Gemini 1.5 Flash (free tier)
 - AI metadata generation: title (≤70 chars), description (150–300 chars), tags (up to 8)
-- AI caption generation: Whisper transcribes video audio → `.srt` file returned
 - `✨ AI Suggest` button on upload confirmation screen — auto-fills title/desc/tags
 - `🔄 Regen Title` button — regenerate title only
 - Language-aware generation (English / Malayalam)
-- RAM guard before Whisper model load
 
 ### Other Changes
 
