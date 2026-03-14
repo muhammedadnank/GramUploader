@@ -154,6 +154,20 @@ WHISPER_MODEL=tiny          # tiny recommended for cloud free tiers (low RAM)
 ### 6. Install & Run Locally
 
 ```bash
+# First time — installs ffmpeg, creates venv, checks .env
+chmod +x setup_local.sh run.sh
+./setup_local.sh
+
+# Every time after
+./run.sh
+```
+
+Or manually:
+
+```bash
+sudo apt-get install -y ffmpeg          # required for Whisper
+python3 -m venv venv
+source venv/bin/activate
 pip install -r requirements.txt
 python main.py
 ```
