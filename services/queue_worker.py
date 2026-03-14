@@ -9,6 +9,7 @@ from database.db import upload_repo
 from database.models import UploadStatus
 from services.youtube_uploader import upload_to_youtube
 from utils.formatters import make_progress_bar, format_size, format_eta
+from utils.messages import Messages
 from utils.logger import log
 from config import Config
 
@@ -92,13 +93,13 @@ async def process_job(app: Client, job: dict):
             dl_last_bytes[0] = current
             dl_last_time[0] = now
             remaining = (total - current) / speed if speed > 0 else 0
-            bar = make_progress_bar(percent)
             try:
+                # UPGRADE #3: dual-stage progress via Messages helper
                 await status_msg.edit_text(
-                    f"📥 <b>Downloading...</b>\n"
-                    f"{bar} <b>{percent}%</b>\n"
-                    f"📁 {format_size(current)} / {format_size(total)}\n"
-                    f"⚡ {format_size(int(speed))}/s · {format_eta(int(remaining))}",
+                    Messages.progress_downloading(
+                        percent, current, total,
+                        speed=int(speed), eta=int(remaining)
+                    ),
                     parse_mode=enums.ParseMode.HTML
                 )
             except Exception:
@@ -119,9 +120,7 @@ async def process_job(app: Client, job: dict):
 
     try:
         await status_msg.edit_text(
-            f"✅ Downloaded!\n"
-            f"📤 <b>Uploading to YouTube...</b>\n"
-            f"{make_progress_bar(0)} <b>0%</b>",
+            Messages.progress_uploading(100, 0),
             parse_mode=enums.ParseMode.HTML
         )
     except Exception:
@@ -136,13 +135,10 @@ async def process_job(app: Client, job: dict):
             last_ul_progress[0] = percent
             elapsed = time.time() - ul_start_time[0]
             remaining = (elapsed / percent * (100 - percent)) if percent > 0 else 0
-            bar = make_progress_bar(percent)
             try:
+                # UPGRADE #3: dual-stage progress
                 await status_msg.edit_text(
-                    f"✅ Downloaded!\n"
-                    f"📤 <b>Uploading to YouTube...</b>\n"
-                    f"{bar} <b>{percent}%</b>\n"
-                    f"⏱ {format_eta(int(remaining))}",
+                    Messages.progress_uploading(100, percent, eta=int(remaining)),
                     parse_mode=enums.ParseMode.HTML
                 )
             except Exception:
@@ -175,26 +171,41 @@ async def process_job(app: Client, job: dict):
         "progress_upload": 100
     })
 
+    # UPGRADE #2: try to send thumbnail as photo for a richer done message
+    done_kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🔗 Watch on YouTube ↗", url=youtube_url)],
+        [
+            InlineKeyboardButton("🎬 Manage Video", callback_data=f"mgr_video:{video_id}"),
+            InlineKeyboardButton("📋 History", callback_data="history:1"),
+        ],
+    ])
+    done_text = Messages.upload_done(title, video_id, privacy)
+    thumbnail_url = f"https://img.youtube.com/vi/{video_id}/hqdefault.jpg"
+    sent_as_photo = False
     try:
-        await status_msg.edit_text(
-            f"✅ <b>Upload Complete!</b>\n\n"
-            f"🎬 <b>{title}</b>\n"
-            f"🔒 {privacy.capitalize()}",
-            parse_mode=enums.ParseMode.HTML,
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🔗 Watch on YouTube ↗", url=youtube_url)],
-                [
-                    InlineKeyboardButton("🎬 Manage Video", callback_data=f"mgr_video:{video_id}"),
-                    InlineKeyboardButton("📋 History", callback_data="history:1"),
-                ],
-            ])
-        )
-    except Exception:
-        await app.send_message(
+        await status_msg.delete()
+        await app.send_photo(
             chat_id,
-            f"✅ <b>Upload done!</b>\n\n🎬 {title}\n🔗 {youtube_url}",
+            photo=thumbnail_url,
+            caption=done_text,
             parse_mode=enums.ParseMode.HTML,
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🔗 Watch on YouTube ↗", url=youtube_url)],
-            ])
+            reply_markup=done_kb
         )
+        sent_as_photo = True
+    except Exception:
+        pass
+
+    if not sent_as_photo:
+        try:
+            await status_msg.edit_text(
+                done_text,
+                parse_mode=enums.ParseMode.HTML,
+                reply_markup=done_kb
+            )
+        except Exception:
+            await app.send_message(
+                chat_id,
+                done_text,
+                parse_mode=enums.ParseMode.HTML,
+                reply_markup=done_kb
+            )
