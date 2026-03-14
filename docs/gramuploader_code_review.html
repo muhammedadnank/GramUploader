@@ -1,0 +1,191 @@
+
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: var(--font-sans); }
+.wrap { padding: 1rem 0; max-width: 680px; }
+h2 { font-size: 18px; font-weight: 500; color: var(--color-text-primary); margin-bottom: 1rem; }
+h3 { font-size: 15px; font-weight: 500; color: var(--color-text-primary); margin: 1.2rem 0 0.5rem; }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 500; margin-right: 4px; }
+.b-critical { background: #F7C1C1; color: #791F1F; }
+.b-bug { background: #FAC775; color: #633806; }
+.b-warn { background: #FAEEDA; color: #854F0B; }
+.b-ok { background: #C0DD97; color: #27500A; }
+.b-info { background: #B5D4F4; color: #0C447C; }
+.item { border-left: 3px solid; padding: 10px 12px; margin-bottom: 8px; border-radius: 0 6px 6px 0; }
+.item-critical { border-color: #E24B4A; background: color-mix(in srgb, #FCEBEB 60%, transparent); }
+.item-bug      { border-color: #EF9F27; background: color-mix(in srgb, #FAEEDA 60%, transparent); }
+.item-warn     { border-color: #B5D4F4; background: color-mix(in srgb, #E6F1FB 60%, transparent); }
+.item-ok       { border-color: #97C459; background: color-mix(in srgb, #EAF3DE 60%, transparent); }
+.item-title { font-size: 13px; font-weight: 500; color: var(--color-text-primary); margin-bottom: 4px; }
+.item-body { font-size: 12px; color: var(--color-text-secondary); line-height: 1.5; }
+code { font-family: var(--font-mono); font-size: 11px; background: var(--color-background-secondary); padding: 1px 5px; border-radius: 3px; }
+.section-divider { border: none; border-top: 1px solid var(--color-border-tertiary); margin: 1.2rem 0; }
+.summary-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 8px; margin-bottom: 1rem; }
+.s-card { border-radius: 8px; padding: 10px; text-align: center; }
+.s-num { font-size: 22px; font-weight: 500; }
+.s-label { font-size: 11px; margin-top: 2px; }
+.s-critical { background: #FCEBEB; color: #A32D2D; }
+.s-bug { background: #FAEEDA; color: #854F0B; }
+.s-warn { background: #E6F1FB; color: #185FA5; }
+.s-ok { background: #EAF3DE; color: #3B6D11; }
+</style>
+<div class="wrap">
+<h2>GramUploader — Full Code Review</h2>
+
+<div class="summary-grid">
+  <div class="s-card s-critical"><div class="s-num">4</div><div class="s-label">Critical bugs</div></div>
+  <div class="s-card s-bug"><div class="s-num">7</div><div class="s-label">Bugs / Logic</div></div>
+  <div class="s-card s-warn"><div class="s-label s-warn" style="font-size:14px;margin-top:4px;">5</div><div class="s-label">Warnings</div></div>
+  <div class="s-card s-ok"><div class="s-num">6</div><div class="s-label">Good patterns</div></div>
+</div>
+
+<hr class="section-divider">
+
+<h3>🔴 Critical Bugs</h3>
+
+<div class="item item-critical">
+  <div class="item-title"><span class="badge b-critical">CRITICAL</span> handlers/__init__.py — FSM handler registration order is broken</div>
+  <div class="item-body">
+    <code>manage.register(app)</code> followed by <code>ai.register(app)</code> — both register <code>filters.text & filters.private</code> handlers (FSM). Pyrogram fires the <b>first</b> matching handler only. So <code>manage.py</code>'s <code>fsm_text</code> will always intercept text messages, and <code>ai.py</code>'s <code>ai_fsm_text</code> will <b>never fire</b> for the <code>STATE_WAIT_HINT</code> state. Same conflict for <code>filters.document</code> — <code>manage.py</code>'s <code>fsm_document</code> vs <code>video.py</code>'s video upload handler. <b>Fix:</b> Merge all FSM text/document routing into a single handler with a shared state dict.
+  </div>
+</div>
+
+<div class="item item-critical">
+  <div class="item-title"><span class="badge b-critical">CRITICAL</span> handlers/video.py — Document FSM conflict</div>
+  <div class="item-body">
+    <code>manage.register()</code> registers <code>filters.document & filters.private</code> FSM handler. <code>video.register()</code> also registers <code>filters.video | filters.document</code> as the upload handler. When a user sends a .srt file inside the caption FSM, Pyrogram may route it to the video upload handler instead. <b>Fix:</b> In <code>manage.py</code>'s fsm_document, add an early state-check guard. Currently it has one (<code>state != STATE_CAPTION_FILE</code>), but the issue is that both handlers are registered — whichever was registered first wins entirely.
+  </div>
+</div>
+
+<div class="item item-critical">
+  <div class="item-title"><span class="badge b-critical">CRITICAL</span> handlers/admin.py — Broadcast sends hardcoded string, not the replied message</div>
+  <div class="item-body">
+    <code>broadcast_do</code> callback does: <code>await client.send_message(uid, "📢 Announcement from bot admin.")</code> — completely ignores the original message the admin replied to. The user is told "Reply to a message to broadcast it" but the actual text is never used. <b>Fix:</b> Store the reply message ID before showing confirm dialog, then forward it in the callback.
+  </div>
+</div>
+
+<div class="item item-critical">
+  <div class="item-title"><span class="badge b-critical">CRITICAL</span> services/oauth_server.py — <code>flow.fetch_token()</code> is a sync call inside async route</div>
+  <div class="item-body">
+    <code>flow.fetch_token(code=code)</code> is a blocking network call inside a FastAPI async route handler. This will block the entire uvicorn event loop during Google token exchange (potentially 300–2000ms). <b>Fix:</b> Wrap with <code>await asyncio.to_thread(lambda: flow.fetch_token(code=code))</code>.
+  </div>
+</div>
+
+<hr class="section-divider">
+<h3>🟠 Bugs / Logic Errors</h3>
+
+<div class="item item-bug">
+  <div class="item-title"><span class="badge b-bug">BUG</span> keyboards.py — <code>upload_confirm</code> keyboard has "Edit Title" button with no handler</div>
+  <div class="item-body">
+    Button <code>callback_data=f"upload_edit_title:{upload_id}"</code> is defined in the keyboard, but there is <b>no <code>on_callback_query</code> handler</b> for the pattern <code>^upload_edit_title:(.+)$</code> anywhere in the codebase. Clicking it will silently do nothing.
+  </div>
+</div>
+
+<div class="item item-bug">
+  <div class="item-title"><span class="badge b-bug">BUG</span> keyboards.py — Admin panel buttons "API Keys" and "Broadcast" have dead callbacks</div>
+  <div class="item-body">
+    <code>callback_data="admin_keys"</code> and <code>callback_data="admin_broadcast"</code> buttons exist in the admin panel keyboard, but <code>admin.py</code> has no handlers registered for <code>^admin_keys$</code> or <code>^admin_broadcast$</code>. The broadcast flow only works via the <code>/broadcast</code> command.
+  </div>
+</div>
+
+<div class="item item-bug">
+  <div class="item-title"><span class="badge b-bug">BUG</span> handlers/start.py — <code>cb_back_start</code> callback regex mismatch</div>
+  <div class="item-body">
+    Handler registered as <code>filters.regex("^back_start$")</code> but keyboard buttons send <code>callback_data="back_start"</code> — this actually matches. However, <code>start.py</code>'s <code>cb_manage_open</code> and <code>cb_ai_menu</code> are registered in <code>start.py</code> but use <code>callback_data="mgr_open"</code> and <code>"ai_menu"</code>. This works, but these cross-handler callbacks create confusion — if <code>manage.py</code>'s handlers fire first, <code>start.py</code>'s callbacks for the same data will be shadowed.
+  </div>
+</div>
+
+<div class="item item-bug">
+  <div class="item-title"><span class="badge b-bug">BUG</span> services/youtube_uploader.py — API key tracking uses wrong ObjectId</div>
+  <div class="item-body">
+    <code>api_key_doc = await apikey_repo.get_active()</code> returns a raw dict (not an <code>APIKey</code> model). Then <code>await apikey_repo.increment_usage(api_key_doc["_id"], UPLOAD_UNITS)</code> — this is correct only if <code>_id</code> exists in the dict. If MongoDB stores the key without <code>_id</code> (e.g. the <code>APIKey.model_dump()</code> result doesn't have <code>_id</code> since it's not in the model), this will raise <code>KeyError</code>. The <code>APIKey</code> Pydantic model has no <code>_id</code> / <code>id</code> field — the <code>_id</code> is auto-assigned by MongoDB but never mapped back. Needs <code>doc.get("_id")</code> guard and the repo's <code>add()</code> should store/return the inserted id.
+  </div>
+</div>
+
+<div class="item item-bug">
+  <div class="item-title"><span class="badge b-bug">BUG</span> services/ai_service.py — Whisper audio path replacement is fragile</div>
+  <div class="item-body">
+    <code>audio_path = video_path.replace(".mp4", ".wav").replace(".mkv", ".wav")</code> — only handles .mp4 and .mkv. Files downloaded by Pyrogram get random temp names (often without extension). The fallback <code>if audio_path == video_path: audio_path = video_path + ".wav"</code> handles this, but the primary replace logic is misleading and prone to producing wrong paths (e.g. a path like <code>/tmp/downloads/abc.mp4.part.mp4</code> could produce unexpected results). Use <code>os.path.splitext</code> instead.
+  </div>
+</div>
+
+<div class="item item-bug">
+  <div class="item-title"><span class="badge b-bug">BUG</span> handlers/manage.py — Schedule FSM imports <code>datetime</code> twice</div>
+  <div class="item-body">
+    Inside <code>fsm_text</code>, the <code>STATE_SCHEDULE</code> branch does <code>from datetime import datetime, timezone</code> — but <code>datetime</code> is already imported at the top of the module as... actually it's NOT imported at the top. The top-level imports are missing <code>datetime</code>. The in-function import works but is inconsistent. More importantly, <code>datetime.strptime</code> can raise <code>ValueError</code> for bad format — this is caught by the outer <code>except Exception</code>, but the error message would be confusing to users. Add format guidance to the message.
+  </div>
+</div>
+
+<div class="item item-bug">
+  <div class="item-title"><span class="badge b-bug">BUG</span> database/repositories/upload_repo.py — mutable default argument</div>
+  <div class="item-body">
+    <code>async def set_status(self, upload_id, status, extra: dict = {})</code> — using a mutable default argument <code>{}</code> is a classic Python bug. If the dict is ever mutated inside, it persists across calls. Use <code>extra: dict = None</code> and then <code>extra = extra or {}</code> inside the function.
+  </div>
+</div>
+
+<hr class="section-divider">
+<h3>🔵 Warnings / Design Issues</h3>
+
+<div class="item item-warn">
+  <div class="item-title"><span class="badge b-warn">WARN</span> queue_worker.py — In-memory queue, no persistence on restart</div>
+  <div class="item-body">
+    <code>upload_queue: deque = deque()</code> — all queued uploads are lost if the bot crashes or Render restarts. Jobs in <code>PENDING</code> or <code>DOWNLOADING</code> status in MongoDB are never retried on startup. Add a startup recovery: query <code>upload_repo</code> for stuck PENDING/DOWNLOADING jobs and re-enqueue them.
+  </div>
+</div>
+
+<div class="item item-warn">
+  <div class="item-title"><span class="badge b-warn">WARN</span> main.py — OAuth server uses <code>threading.Thread</code> with asyncio</div>
+  <div class="item-body">
+    Uvicorn (FastAPI) is started in a daemon thread while the bot runs in the main asyncio loop. The OAuth callback handler does <code>await user_repo.set_youtube_token(...)</code> — this is an async Motor call being awaited inside a FastAPI async route, which runs in a different thread's event loop. This <b>will work</b> because FastAPI/uvicorn creates its own event loop, but the Motor client was initialized in the main loop. This is a potential race condition. Better: use <code>asyncio.run_coroutine_threadsafe()</code> or initialize a separate Motor client for the OAuth server.
+  </div>
+</div>
+
+<div class="item item-warn">
+  <div class="item-title"><span class="badge b-warn">WARN</span> utils/i18n.py — i18n system loaded but never used in messages</div>
+  <div class="item-body">
+    A full locale system exists (<code>utils/i18n.py</code>, <code>locales/en.json</code>, <code>locales/ml.json</code>) and user language settings are stored in MongoDB. But <code>utils/messages.py</code> completely ignores it — all messages are hardcoded in English. The settings UI even lets users pick Malayalam. This feature is 0% wired up.
+  </div>
+</div>
+
+<div class="item item-warn">
+  <div class="item-title"><span class="badge b-warn">WARN</span> handlers/video.py — <code>_pending</code> dict never expires</div>
+  <div class="item-body">
+    <code>_pending</code> is an in-memory dict of pending confirmations. If a user initiates an upload and never responds (no confirm, no cancel), the entry stays forever. Under heavy use this is a memory leak. Add a TTL — store timestamp alongside the data and clean up entries older than 10 minutes in a background task, or use <code>cachetools.TTLCache</code>.
+  </div>
+</div>
+
+<div class="item item-warn">
+  <div class="item-title"><span class="badge b-warn">WARN</span> config.py — <code>ADMIN_IDS</code> can silently be empty list</div>
+  <div class="item-body">
+    If <code>ADMIN_IDS</code> env var is empty or unset, <code>ADMIN_IDS = []</code> silently. No admin will ever be able to use admin commands, and the bot startup will skip the admin notification without any warning. Add a startup validation: <code>if not Config.ADMIN_IDS: log.warning("ADMIN_IDS is empty — no admin access!")</code>.
+  </div>
+</div>
+
+<hr class="section-divider">
+<h3>✅ What's Done Well</h3>
+
+<div class="item item-ok">
+  <div class="item-title"><span class="badge b-ok">GOOD</span> Token auto-refresh implemented correctly</div>
+  <div class="item-body"><code>youtube_uploader.py</code> checks <code>creds.expired</code> and refreshes using <code>asyncio.to_thread</code> + saves back to DB. Clean pattern.</div>
+</div>
+<div class="item item-ok">
+  <div class="item-title"><span class="badge b-ok">GOOD</span> Resumable upload with progress callback</div>
+  <div class="item-body"><code>MediaFileUpload(resumable=True)</code> with chunked progress is correctly implemented. Upload recovery on failure is possible because of this.</div>
+</div>
+<div class="item item-ok">
+  <div class="item-title"><span class="badge b-ok">GOOD</span> Rate limiter in middlewares</div>
+  <div class="item-body">Clean in-memory rate limiter with sliding window. Applied before all DB operations.</div>
+</div>
+<div class="item item-ok">
+  <div class="item-title"><span class="badge b-ok">GOOD</span> Clean repository pattern</div>
+  <div class="item-body">UserRepository, UploadRepository, APIKeyRepository — well-separated, Motor async, no raw collection calls scattered in handlers.</div>
+</div>
+<div class="item item-ok">
+  <div class="item-title"><span class="badge b-ok">GOOD</span> Render PORT env var handling</div>
+  <div class="item-body"><code>int(os.getenv("PORT") or os.getenv("OAUTH_SERVER_PORT", 8080))</code> — correctly handles Render's injected PORT variable.</div>
+</div>
+<div class="item item-ok">
+  <div class="item-title"><span class="badge b-ok">GOOD</span> Whisper RAM guard</div>
+  <div class="item-body"><code>psutil.virtual_memory()</code> check before loading Whisper model — prevents OOM crash on small instances.</div>
+</div>
+</div>
