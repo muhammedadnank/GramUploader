@@ -5,6 +5,8 @@ services:
     buildCommand: |
       apt-get update && apt-get install -y ffmpeg
       pip install -r requirements.txt
+      # To enable Whisper AI captions, uncomment the next line (requires ~2.5GB extra disk):
+      # pip install -r requirements-whisper.txt
     startCommand: python main.py
     envVars:
       - key: API_ID
