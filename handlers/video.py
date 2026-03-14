@@ -45,7 +45,7 @@ async def handle_video_upload(client: Client, message: Message):
         await message.reply(
             Messages.not_connected(),
             reply_markup=Keyboards.connect(message.from_user.id),
-            parse_mode="html"
+            parse_mode="HTML"
         )
         return
 
@@ -55,7 +55,7 @@ async def handle_video_upload(client: Client, message: Message):
         await message.reply(
             Messages.daily_limit(Config.FREE_UPLOADS_PER_DAY),
             reply_markup=Keyboards.premium(),
-            parse_mode="html"
+            parse_mode="HTML"
         )
         return
 
@@ -64,7 +64,7 @@ async def handle_video_upload(client: Client, message: Message):
     if not is_within_size_limit(media.file_size or 0):
         await message.reply(
             Messages.file_too_large(media.file_size or 0, Config.MAX_FILE_SIZE_MB),
-            parse_mode="html"
+            parse_mode="HTML"
         )
         return
 
@@ -95,7 +95,7 @@ async def handle_video_upload(client: Client, message: Message):
     await message.reply(
         Messages.upload_confirm(title, media.file_size or 0, default_privacy),
         reply_markup=Keyboards.upload_confirm(pending_key),
-        parse_mode="html"
+        parse_mode="HTML"
     )
 
 
@@ -143,7 +143,7 @@ def register(app: Client):
 
         await cq.message.edit_text(
             Messages.upload_queued(data["title"], data["size"], position),
-            parse_mode="html"
+            parse_mode="HTML"
         )
 
     @app.on_callback_query(filters.regex(r"^upload_cancel:(.+)$"))
@@ -174,7 +174,7 @@ def register(app: Client):
         await cq.message.edit_text(
             Messages.upload_confirm(data["title"], data["size"], privacy),
             reply_markup=Keyboards.upload_confirm(pending_key),
-            parse_mode="html"
+            parse_mode="HTML"
         )
         await cq.answer(f"Privacy set to {privacy}")
 
@@ -188,7 +188,7 @@ def register(app: Client):
         await cq.message.edit_text(
             Messages.upload_confirm(data["title"], data["size"], data["privacy"]),
             reply_markup=Keyboards.upload_confirm(pending_key),
-            parse_mode="html"
+            parse_mode="HTML"
         )
 
     @app.on_callback_query(filters.regex(r"^upload_edit_title:(.+)$"))
@@ -204,5 +204,5 @@ def register(app: Client):
             f"Current: <code>{current_title[:80]}</code>\n\n"
             f"Send the new title as a message.\n"
             f"Send /cancel to abort.",
-            parse_mode="html"
+            parse_mode="HTML"
         )
