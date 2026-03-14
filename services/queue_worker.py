@@ -1,6 +1,7 @@
 import asyncio
 from collections import deque
 from pyrogram import Client
+from pyrogram import enums
 from database.db import upload_repo
 from database.models import UploadStatus
 from services.youtube_uploader import upload_to_youtube
@@ -142,7 +143,7 @@ async def process_job(app: Client, job: dict):
             f"✅ <b>Upload Complete!</b>\n\n"
             f"🎬 {title}\n"
             f"🔗 {youtube_url}",
-            parse_mode="HTML"
+            parse_mode=enums.ParseMode.HTML
         )
     except Exception:
         await app.send_message(chat_id, f"✅ Upload done!\n🔗 {youtube_url}")
