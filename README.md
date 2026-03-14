@@ -6,7 +6,7 @@ Upload Telegram videos directly to YouTube — with AI metadata, YouTube Studio-
 
 - **Upload** videos from Telegram to YouTube with live progress
 - **Manage** existing YouTube videos (edit, delete, thumbnail, captions, playlists)
-- **AI Tools** — title, description & tags via Gemini · captions via Whisper
+- **AI Tools** — title, description & tags via Gemini
 - **Confirmation screen** before upload — set title, edit title inline, privacy, cancel
 - **Queue system** — multiple uploads handled sequentially
 - **Free / Premium** plan support with daily upload limits
@@ -20,7 +20,6 @@ Upload Telegram videos directly to YouTube — with AI metadata, YouTube Studio-
 | Telegram MTProto | Kurigram (Pyrogram fork) |
 | YouTube API | Google API Python Client v3 |
 | AI Metadata | Gemini 1.5 Flash (free tier) |
-| AI Captions | OpenAI Whisper (local) |
 | Database | MongoDB Atlas (Motor async) |
 | OAuth2 Server | FastAPI + Uvicorn |
 | Deploy | Azure ACI · Render · Railway |
@@ -156,7 +155,6 @@ OAUTH_SERVER_PORT=8080
 
 # AI
 GEMINI_API_KEY=your_gemini_api_key
-WHISPER_MODEL=tiny          # tiny recommended for cloud free tiers (low RAM)
 ```
 
 ### 6. Install & Run Locally
@@ -269,8 +267,7 @@ Add `https://gramuploader.onrender.com/callback` to Authorized redirect URIs.
 
 Render will run `buildCommand` from `render.yaml` (installs `ffmpeg` + Python deps) then start `python main.py`.
 
-> ⚠️ **Render free tier has 512MB RAM.** Set `WHISPER_MODEL=tiny` to avoid out-of-memory errors.
-> The bot will sleep after 15 minutes of inactivity on free tier — first message after sleep may be slow.
+> ℹ️ The bot will sleep after 15 minutes of inactivity on free tier — first message after sleep may be slow.
 
 ---
 
@@ -345,18 +342,10 @@ Set all env vars in Railway dashboard → Variables.
 
 ```
 /ai
-  ├── ✨ AI Metadata → send hint → Gemini generates title + description + tags
-  └── 🎙 AI Captions → send video → Whisper transcribes audio → .srt file returned
+  └── ✨ AI Metadata → send hint → Gemini generates title + description + tags
 ```
 
-**Whisper model sizes** (set via `WHISPER_MODEL` in `.env`):
-
-| Model | RAM needed | Speed | Accuracy | Recommended for |
-|---|---|---|---|---|
-| `tiny` | ~400MB | fastest | basic | Render / cloud free tiers ✅ |
-| `base` | ~500MB | fast | good | Local / Azure 512MB |
-| `small` | ~1GB | medium | better | Azure 1GB+ |
-| `medium` | ~3GB | slow | best | Local only |
+For captions, use /manage → 📝 Captions to upload your own `.srt` file directly to YouTube.
 
 ---
 
@@ -392,8 +381,6 @@ before `fsm_router`, so they always take priority.
 - Cards, End Screens, Audio replacement — not available via YouTube Data API
 - OAuth token auto-refreshed on next use
 - In-memory queue — bot restart marks pending uploads as failed (use Redis for production)
-- Whisper AI captions: max recommended 500MB video for reasonable speed
-- Whisper requires ~400–3000MB RAM depending on model — use `tiny` on free cloud tiers
 - Render free tier: bot sleeps after 15 min inactivity, first wake-up is slow
 
 ---
@@ -440,4 +427,4 @@ refactor: move progress bar to formatters
 
 See [docs/CHANGELOG.md](docs/CHANGELOG.md) for full version history.
 
-Latest: **v2.2.0** · [v2.1.0] · [v2.0.0] · [v1.0.0]
+Latest: **v2.3.0** · [v2.2.0] · [v2.1.0] · [v2.0.0] · [v1.0.0]
