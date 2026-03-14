@@ -19,7 +19,8 @@ def is_within_size_limit(size_bytes: int) -> bool:
 
 def sanitize_title(title: str) -> str:
     """Remove characters not allowed in YouTube titles"""
-    forbidden = ['<', '>', '"', "'"]
+    # Single quote (') is valid in YouTube titles — don't strip it
+    forbidden = ['<', '>', '"']
     for char in forbidden:
         title = title.replace(char, '')
     return title.strip()[:100]  # YouTube title max 100 chars

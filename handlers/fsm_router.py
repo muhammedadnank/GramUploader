@@ -16,6 +16,7 @@ Priority order (photo messages):
   1. Manage thumbnail   (manage._states STATE_THUMBNAIL)
 """
 
+import os
 from pyrogram import Client, filters
 from pyrogram.errors import MessageNotModified
 from pyrogram import enums
@@ -35,6 +36,7 @@ def register(app: Client):
         # ── 1. Upload title edit ────────────────────────────────────────────
         from handlers.video import _pending, _pending_edit
         if user_id in _pending_edit:
+            # FIX #13: always pop the edit state, regardless of whether pending_key is still alive
             pending_key = _pending_edit.pop(user_id)
             if text == "/cancel":
                 await message.reply("❌ Cancelled.")
@@ -52,10 +54,11 @@ def register(app: Client):
                     parse_mode=enums.ParseMode.HTML
                 )
             else:
+                # Session expired — inform user and clear state (already popped above)
                 await message.reply("⚠️ Session expired. Please resend the video.")
             return
 
-        # ── 3. Manage FSM ───────────────────────────────────────────────────
+        # ── 2. Manage FSM ───────────────────────────────────────────────────
         from handlers.manage import get_state, clear_state, set_state
         from handlers.manage import (
             STATE_EDIT_TITLE, STATE_EDIT_DESC, STATE_EDIT_TAGS,
@@ -95,9 +98,18 @@ def register(app: Client):
 
             elif state == STATE_CAPTION_LANG:
                 srt_path = state_data.get("srt_path")
-                await upload_caption(user_id, video_id, srt_path, language=text)
-                clear_state(user_id)
-                await message.reply(ManagerMessages.update_success("Caption"), parse_mode=enums.ParseMode.HTML)
+                try:
+                    await upload_caption(user_id, video_id, srt_path, language=text)
+                    clear_state(user_id)
+                    await message.reply(ManagerMessages.update_success("Caption"), parse_mode=enums.ParseMode.HTML)
+                finally:
+                    # FIX #9: delete the SRT temp file after upload (success or failure)
+                    if srt_path:
+                        try:
+                            if os.path.exists(srt_path):
+                                os.remove(srt_path)
+                        except Exception as e:
+                            log.warning(f"Could not delete SRT temp file {srt_path}: {e}")
 
             elif state == STATE_SCHEDULE:
                 from datetime import datetime, timezone
@@ -140,6 +152,7 @@ def register(app: Client):
             return
         video_id = state_data.get("video_id")
         msg = await message.reply("⏳ Setting thumbnail...")
+        path = None
         try:
             from services.youtube_manager import set_thumbnail
             path = await message.download()
@@ -149,6 +162,14 @@ def register(app: Client):
         except Exception as e:
             clear_state(user_id)
             await msg.edit_text(f"❌ {e}")
+        finally:
+            # FIX #8: always delete the downloaded thumbnail temp file
+            if path:
+                try:
+                    if os.path.exists(path):
+                        os.remove(path)
+                except Exception as cleanup_err:
+                    log.warning(f"Could not delete thumbnail temp file {path}: {cleanup_err}")
 
     # ── DOCUMENT ──────────────────────────────────────────────────────────────
 

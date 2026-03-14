@@ -195,9 +195,12 @@ class Messages:
     @staticmethod
     def quota_text(used: int, limit, plan: str) -> str:
         limit_str = str(limit) if limit != -1 else "∞"
-        bar = make_progress_bar(
-            int((used / limit) * 100) if isinstance(limit, int) and limit > 0 else 0
-        )
+        # FIX #11: limit may be "∞" (str) for premium — guard before arithmetic
+        if isinstance(limit, int) and limit > 0:
+            bar_pct = int((used / limit) * 100)
+        else:
+            bar_pct = 100 if plan != "free" else 0
+        bar = make_progress_bar(bar_pct)
         return (
             f"📊 <b>Today's Usage</b>\n\n"
             f"Plan: <b>{plan.capitalize()}</b>\n"

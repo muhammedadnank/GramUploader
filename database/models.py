@@ -25,6 +25,8 @@ class YouTubeToken(BaseModel):
 
 
 class User(BaseModel):
+    model_config = {"use_enum_values": True}
+
     id: int  # telegram_id as _id
     username: Optional[str] = None
     first_name: Optional[str] = None
@@ -42,6 +44,8 @@ class User(BaseModel):
 
 
 class Upload(BaseModel):
+    model_config = {"use_enum_values": True}
+
     telegram_id: int
     file_id: str
     title: str

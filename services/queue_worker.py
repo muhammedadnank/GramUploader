@@ -1,4 +1,5 @@
 import asyncio
+import os
 import time
 from collections import deque
 from pyrogram import Client
@@ -36,8 +37,9 @@ async def start_worker(app: Client):
                 log.error(f"Worker error: {e}", exc_info=True)
                 upload_id = job.get("upload_id")
                 if upload_id:
+                    # FIX #1: use .value so MongoDB stores the string, not the enum
                     await upload_repo.update(upload_id, {
-                        "status": UploadStatus.FAILED,
+                        "status": UploadStatus.FAILED.value,
                         "error": str(e)
                     })
                 try:
@@ -70,7 +72,7 @@ async def process_job(app: Client, job: dict):
         "⏳ Starting download from Telegram..."
     )
 
-    await upload_repo.update(upload_id, {"status": UploadStatus.DOWNLOADING})
+    await upload_repo.update(upload_id, {"status": UploadStatus.DOWNLOADING.value})
 
     # Download progress with speed + ETA
     last_dl_progress = [0]
@@ -111,7 +113,7 @@ async def process_job(app: Client, job: dict):
     file_path = await msg.download(progress=download_progress)
 
     await upload_repo.update(upload_id, {
-        "status": UploadStatus.UPLOADING,
+        "status": UploadStatus.UPLOADING.value,
         "progress_download": 100
     })
 
@@ -148,19 +150,27 @@ async def process_job(app: Client, job: dict):
             await upload_repo.update(upload_id, {"progress_upload": percent})
 
     # Upload to YouTube
-    video_id = await upload_to_youtube(
-        telegram_id=telegram_id,
-        file_path=file_path,
-        title=title,
-        description=description,
-        tags=tags,
-        privacy=privacy,
-        progress_callback=upload_progress
-    )
+    try:
+        video_id = await upload_to_youtube(
+            telegram_id=telegram_id,
+            file_path=file_path,
+            title=title,
+            description=description,
+            tags=tags,
+            privacy=privacy,
+            progress_callback=upload_progress
+        )
+    finally:
+        # FIX #2: always clean up the downloaded temp file
+        try:
+            if file_path and os.path.exists(file_path):
+                os.remove(file_path)
+        except Exception as cleanup_err:
+            log.warning(f"Could not delete temp file {file_path}: {cleanup_err}")
 
     youtube_url = f"https://youtube.com/watch?v={video_id}"
     await upload_repo.update(upload_id, {
-        "status": UploadStatus.DONE,
+        "status": UploadStatus.DONE.value,
         "youtube_id": video_id,
         "progress_upload": 100
     })

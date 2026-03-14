@@ -18,7 +18,7 @@ async def recover_stuck_jobs():
     log.warning(f"Recovering {len(stuck)} stuck upload(s) from previous session...")
     for doc in stuck:
         await upload_repo.update(doc["_id"], {
-            "status": UploadStatus.FAILED.value,
+            "status": UploadStatus.FAILED.value,  # FIX #1: .value for string storage
             "error": "Bot restarted during upload. Please resend the video."
         })
     log.info(f"Marked {len(stuck)} stuck job(s) as failed.")
@@ -42,6 +42,11 @@ async def main():
 
     await app.start()
     log.info("Bot started successfully")
+
+    # FIX #19: create DB indexes on startup (idempotent — safe to call every time)
+    from database.db import ensure_indexes
+    await ensure_indexes()
+    log.info("Database indexes ensured")
 
     await recover_stuck_jobs()
 

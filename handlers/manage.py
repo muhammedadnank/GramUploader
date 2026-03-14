@@ -3,12 +3,26 @@
 Full video management: edit, delete, thumbnail, captions, playlists, stats
 
 FSM text/photo/document handling has been moved to handlers/fsm_router.py
-to avoid Pyrogram handler conflicts.
+to avoid handler conflicts.
 """
 
+# FIX #20: all imports at the top, _safe_edit defined after imports
 from pyrogram import Client, filters
 from pyrogram.errors import MessageNotModified
 from pyrogram import enums
+from pyrogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from core.middlewares import apply_middlewares
+from services.youtube_manager import (
+    get_my_videos, get_video_details, update_video,
+    delete_video, set_thumbnail, get_my_playlists,
+    add_to_playlist, create_playlist, upload_caption,
+    get_captions, delete_caption, get_channel_stats,
+    format_count
+)
+from utils.manage.keyboards import ManagerKeyboards
+from utils.manage.messages import ManagerMessages
+from utils.keyboards import Keyboards
+from utils.logger import log
 
 
 async def _safe_edit(message, text=None, reply_markup=None, parse_mode=None):
@@ -25,19 +39,6 @@ async def _safe_edit(message, text=None, reply_markup=None, parse_mode=None):
             await message.edit_reply_markup(reply_markup=reply_markup)
     except MessageNotModified:
         pass
-from pyrogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
-from core.middlewares import apply_middlewares
-from services.youtube_manager import (
-    get_my_videos, get_video_details, update_video,
-    delete_video, set_thumbnail, get_my_playlists,
-    add_to_playlist, create_playlist, upload_caption,
-    get_captions, delete_caption, get_channel_stats,
-    format_count
-)
-from utils.manage.keyboards import ManagerKeyboards
-from utils.manage.messages import ManagerMessages
-from utils.keyboards import Keyboards
-from utils.logger import log
 
 # FSM state store: {user_id: {state, video_id, ...}}
 _states: dict = {}
@@ -98,6 +99,7 @@ def register(app: Client):
 
     @app.on_callback_query(filters.regex(r"^mgr_list:(.*)$"))
     async def cb_list(client: Client, cq: CallbackQuery):
+        await cq.answer()  # FIX #4
         token = cq.matches[0].group(1) or None
         await cq.message.edit_text("⏳ Loading...")
         try:
@@ -122,6 +124,7 @@ def register(app: Client):
 
     @app.on_callback_query(filters.regex(r"^mgr_video:(.+)$"))
     async def cb_video_panel(client: Client, cq: CallbackQuery):
+        await cq.answer()  # FIX #4
         video_id = cq.matches[0].group(1)
         # Clear any active FSM state when returning to video panel
         clear_state(cq.from_user.id)
@@ -140,6 +143,7 @@ def register(app: Client):
 
     @app.on_callback_query(filters.regex("^mgr_channel_stats$"))
     async def cb_channel_stats(client: Client, cq: CallbackQuery):
+        await cq.answer()  # FIX #4
         await cq.message.edit_text("⏳ Fetching channel stats...")
         try:
             channel = await get_channel_stats(cq.from_user.id)
@@ -158,6 +162,7 @@ def register(app: Client):
 
     @app.on_callback_query(filters.regex(r"^mgr_edit_title:(.+)$"))
     async def cb_edit_title(client: Client, cq: CallbackQuery):
+        await cq.answer()  # FIX #4
         video_id = cq.matches[0].group(1)
         video = await get_video_details(cq.from_user.id, video_id)
         current = video["snippet"]["title"]
@@ -168,6 +173,7 @@ def register(app: Client):
 
     @app.on_callback_query(filters.regex(r"^mgr_edit_desc:(.+)$"))
     async def cb_edit_desc(client: Client, cq: CallbackQuery):
+        await cq.answer()  # FIX #4
         video_id = cq.matches[0].group(1)
         video = await get_video_details(cq.from_user.id, video_id)
         current = video["snippet"].get("description", "")
@@ -178,6 +184,7 @@ def register(app: Client):
 
     @app.on_callback_query(filters.regex(r"^mgr_edit_tags:(.+)$"))
     async def cb_edit_tags(client: Client, cq: CallbackQuery):
+        await cq.answer()  # FIX #4
         video_id = cq.matches[0].group(1)
         video = await get_video_details(cq.from_user.id, video_id)
         current_tags = ", ".join(video["snippet"].get("tags", []))
@@ -188,6 +195,7 @@ def register(app: Client):
 
     @app.on_callback_query(filters.regex(r"^mgr_privacy:(.+)$"))
     async def cb_privacy(client: Client, cq: CallbackQuery):
+        await cq.answer()  # FIX #4
         video_id = cq.matches[0].group(1)
         video = await get_video_details(cq.from_user.id, video_id)
         current = video["status"]["privacyStatus"]
@@ -199,6 +207,7 @@ def register(app: Client):
 
     @app.on_callback_query(filters.regex(r"^mgr_set_privacy:(\w+):(.+)$"))
     async def cb_set_privacy(client: Client, cq: CallbackQuery):
+        await cq.answer()  # FIX #4
         privacy = cq.matches[0].group(1)
         video_id = cq.matches[0].group(2)
         try:
@@ -217,6 +226,7 @@ def register(app: Client):
 
     @app.on_callback_query(filters.regex(r"^mgr_category:(.+)$"))
     async def cb_category(client: Client, cq: CallbackQuery):
+        await cq.answer()  # FIX #4
         video_id = cq.matches[0].group(1)
         video = await get_video_details(cq.from_user.id, video_id)
         current = video["snippet"].get("categoryId", "22")
@@ -228,6 +238,7 @@ def register(app: Client):
 
     @app.on_callback_query(filters.regex(r"^mgr_set_category:(\w+):(.+)$"))
     async def cb_set_category(client: Client, cq: CallbackQuery):
+        await cq.answer()  # FIX #4
         cat_id = cq.matches[0].group(1)
         video_id = cq.matches[0].group(2)
         try:
@@ -246,6 +257,7 @@ def register(app: Client):
 
     @app.on_callback_query(filters.regex(r"^mgr_thumbnail:(.+)$"))
     async def cb_thumbnail(client: Client, cq: CallbackQuery):
+        await cq.answer()  # FIX #4
         video_id = cq.matches[0].group(1)
         set_state(cq.from_user.id, STATE_THUMBNAIL, video_id=video_id)
         await cq.message.edit_text(
@@ -260,6 +272,7 @@ def register(app: Client):
 
     @app.on_callback_query(filters.regex(r"^mgr_playlist:(.+)$"))
     async def cb_playlist(client: Client, cq: CallbackQuery):
+        await cq.answer()  # FIX #4
         video_id = cq.matches[0].group(1)
         await cq.message.edit_text("⏳ Fetching playlists...")
         try:
@@ -281,6 +294,7 @@ def register(app: Client):
 
     @app.on_callback_query(filters.regex(r"^mgr_add_playlist:([^:]+):(.+)$"))
     async def cb_add_playlist(client: Client, cq: CallbackQuery):
+        await cq.answer()  # FIX #4
         playlist_id = cq.matches[0].group(1)
         video_id = cq.matches[0].group(2)
         try:
@@ -297,6 +311,7 @@ def register(app: Client):
 
     @app.on_callback_query(filters.regex(r"^mgr_new_playlist:(.+)$"))
     async def cb_new_playlist(client: Client, cq: CallbackQuery):
+        await cq.answer()  # FIX #4
         video_id = cq.matches[0].group(1)
         set_state(cq.from_user.id, STATE_NEW_PLAYLIST, video_id=video_id)
         await cq.message.edit_text(
@@ -308,6 +323,7 @@ def register(app: Client):
 
     @app.on_callback_query(filters.regex(r"^mgr_captions:(.+)$"))
     async def cb_captions(client: Client, cq: CallbackQuery):
+        await cq.answer()  # FIX #4
         video_id = cq.matches[0].group(1)
         await cq.message.edit_text("⏳ Fetching captions...")
         try:
@@ -323,12 +339,14 @@ def register(app: Client):
 
     @app.on_callback_query(filters.regex(r"^mgr_upload_caption:(.+)$"))
     async def cb_upload_caption(client: Client, cq: CallbackQuery):
+        await cq.answer()  # FIX #4
         video_id = cq.matches[0].group(1)
         set_state(cq.from_user.id, STATE_CAPTION_FILE, video_id=video_id)
         await cq.message.edit_text(ManagerMessages.caption_prompt(), parse_mode=enums.ParseMode.HTML)
 
     @app.on_callback_query(filters.regex(r"^mgr_del_caption:([^:]+):(.+)$"))
     async def cb_del_caption(client: Client, cq: CallbackQuery):
+        await cq.answer()  # FIX #4
         caption_id = cq.matches[0].group(1)
         video_id = cq.matches[0].group(2)
         try:
@@ -347,6 +365,7 @@ def register(app: Client):
 
     @app.on_callback_query(filters.regex(r"^mgr_advanced:(.+)$"))
     async def cb_advanced(client: Client, cq: CallbackQuery):
+        await cq.answer()  # FIX #4
         video_id = cq.matches[0].group(1)
         video = await get_video_details(cq.from_user.id, video_id)
         status = video["status"]
@@ -358,6 +377,7 @@ def register(app: Client):
 
     @app.on_callback_query(filters.regex(r"^mgr_toggle_kids:(.+)$"))
     async def cb_toggle_kids(client: Client, cq: CallbackQuery):
+        await cq.answer()  # FIX #4
         video_id = cq.matches[0].group(1)
         video = await get_video_details(cq.from_user.id, video_id)
         current = video["status"].get("selfDeclaredMadeForKids", False)
@@ -368,6 +388,7 @@ def register(app: Client):
 
     @app.on_callback_query(filters.regex(r"^mgr_toggle_embed:(.+)$"))
     async def cb_toggle_embed(client: Client, cq: CallbackQuery):
+        await cq.answer()  # FIX #4
         video_id = cq.matches[0].group(1)
         video = await get_video_details(cq.from_user.id, video_id)
         current = video["status"].get("embeddable", True)
@@ -378,6 +399,7 @@ def register(app: Client):
 
     @app.on_callback_query(filters.regex(r"^mgr_toggle_license:(.+)$"))
     async def cb_toggle_license(client: Client, cq: CallbackQuery):
+        await cq.answer()  # FIX #4
         video_id = cq.matches[0].group(1)
         video = await get_video_details(cq.from_user.id, video_id)
         current = video["status"].get("license", "youtube")
@@ -389,6 +411,7 @@ def register(app: Client):
 
     @app.on_callback_query(filters.regex(r"^mgr_schedule:(.+)$"))
     async def cb_schedule(client: Client, cq: CallbackQuery):
+        await cq.answer()  # FIX #4
         video_id = cq.matches[0].group(1)
         set_state(cq.from_user.id, STATE_SCHEDULE, video_id=video_id)
         await cq.message.edit_text(ManagerMessages.schedule_prompt(), parse_mode=enums.ParseMode.HTML)
@@ -397,6 +420,7 @@ def register(app: Client):
 
     @app.on_callback_query(filters.regex(r"^mgr_stats:(.+)$"))
     async def cb_stats(client: Client, cq: CallbackQuery):
+        await cq.answer()  # FIX #4
         video_id = cq.matches[0].group(1)
         video = await get_video_details(cq.from_user.id, video_id)
         stats = video.get("statistics", {})
@@ -416,6 +440,7 @@ def register(app: Client):
 
     @app.on_callback_query(filters.regex(r"^mgr_delete_confirm:(.+)$"))
     async def cb_delete_confirm(client: Client, cq: CallbackQuery):
+        await cq.answer()  # FIX #4
         video_id = cq.matches[0].group(1)
         video = await get_video_details(cq.from_user.id, video_id)
         title = video["snippet"]["title"]
@@ -427,6 +452,7 @@ def register(app: Client):
 
     @app.on_callback_query(filters.regex(r"^mgr_delete_do:(.+)$"))
     async def cb_delete_do(client: Client, cq: CallbackQuery):
+        await cq.answer()  # FIX #4
         video_id = cq.matches[0].group(1)
         try:
             video = await get_video_details(cq.from_user.id, video_id)

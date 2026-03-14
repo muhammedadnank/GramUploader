@@ -261,9 +261,11 @@ Set all env vars in Railway dashboard → Variables.
 |---------|-------------|
 | `/start` | Main menu |
 | `/connect` | Link YouTube channel via Google OAuth |
+| `/disconnect` | Unlink your YouTube account |
 | `/manage` | YouTube Studio panel |
 | `/history` | Recent upload history (paginated) |
 | `/quota` | Today's upload usage |
+| `/queue` | Check current upload queue size |
 | `/settings` | Preferences: privacy, language, auto-title |
 | `/cancel` | Cancel active FSM input (works anywhere) |
 
@@ -293,6 +295,8 @@ Set all env vars in Railway dashboard → Variables.
                     ├── ✏️ Edit Title → send new title as message
                     ├── 🔒 Privacy → Public / Private / Unlisted
                     └── Upload Now → Queue → Download → Upload → YouTube link
+
+/disconnect → Unlinks YouTube account (token wiped from DB)
 ```
 
 ## /manage Panel
@@ -385,4 +389,4 @@ refactor: move progress bar to formatters
 
 See [docs/CHANGELOG.md](docs/CHANGELOG.md) for full version history.
 
-Latest: **v2.5.0** · [v2.4.0] · [v2.3.0] · [v2.2.0] · [v2.1.0] · [v2.0.0] · [v1.0.0]
+Latest: **v2.6.0** · [v2.5.0] · [v2.4.0] · [v2.3.0] · [v2.2.0] · [v2.1.0] · [v2.0.0] · [v1.0.0]

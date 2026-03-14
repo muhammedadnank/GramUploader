@@ -32,8 +32,6 @@ services:
         value: "2000"
       - key: MAINTENANCE_MODE
         value: "false"
-      - key: GEMINI_API_KEY
-        sync: false
       - key: START_IMAGE_URL
         sync: false
       - key: OWNER_URL

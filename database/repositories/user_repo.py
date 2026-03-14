@@ -1,7 +1,7 @@
 from motor.motor_asyncio import AsyncIOMotorCollection
 from database.models import User, YouTubeToken, Plan
 from datetime import datetime
-from typing import Optional
+from typing import Optional, AsyncIterator
 from utils.logger import log
 
 
@@ -38,6 +38,15 @@ class UserRepository:
                 "youtube_token": token.model_dump(),
                 "youtube_connected": True,
                 "connected_at": datetime.utcnow()
+            }}
+        )
+
+    async def clear_youtube_token(self, telegram_id: int):
+        await self.col.update_one(
+            {"_id": telegram_id},
+            {"$set": {
+                "youtube_token": None,
+                "youtube_connected": False,
             }}
         )
 
@@ -89,6 +98,11 @@ class UserRepository:
         return await self.col.count_documents({"youtube_connected": True})
 
     async def get_all_ids(self) -> list[int]:
+        # FIX #12: stream cursor instead of loading all IDs into RAM
         cursor = self.col.find({}, {"_id": 1})
-        docs = await cursor.to_list(length=None)
-        return [d["_id"] for d in docs]
+        return [doc["_id"] async for doc in cursor]
+
+    async def iter_all_ids(self) -> AsyncIterator[int]:
+        """Memory-safe async iterator for broadcast — yields one ID at a time."""
+        async for doc in self.col.find({}, {"_id": 1}):
+            yield doc["_id"]

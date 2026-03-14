@@ -42,6 +42,22 @@ def register(app: Client):
         else:
             await message.reply(Messages.connect_text(), reply_markup=Keyboards.connect(message.from_user.id), parse_mode=enums.ParseMode.HTML)
 
+    # FIX #18: /disconnect command so users can unlink their YouTube account
+    @app.on_message(filters.command("disconnect") & filters.private)
+    async def disconnect(client: Client, message: Message):
+        if not await apply_middlewares(client, message):
+            return
+        user = await user_repo.find(message.from_user.id)
+        if not user or not user.youtube_connected:
+            await message.reply("❌ No YouTube account is linked.")
+            return
+        await user_repo.clear_youtube_token(message.from_user.id)
+        await message.reply(
+            "✅ <b>YouTube Disconnected</b>\n\nYour account has been unlinked.\nUse /connect to link again.",
+            parse_mode=enums.ParseMode.HTML,
+            reply_markup=Keyboards.connect(message.from_user.id)
+        )
+
     @app.on_message(filters.command("history") & filters.private)
     async def history(client: Client, message: Message):
         if not await apply_middlewares(client, message):
@@ -54,7 +70,7 @@ def register(app: Client):
             return
         user = await user_repo.find(message.from_user.id)
         used = await user_repo.get_uploads_today(message.from_user.id)
-        plan = user.plan.value if user else "free"
+        plan = user.plan if user else "free"
         limit = Config.FREE_UPLOADS_PER_DAY if plan == "free" else "∞"
         await message.reply(Messages.quota_text(used, limit, plan), reply_markup=Keyboards.back_to_start(), parse_mode=enums.ParseMode.HTML)
 
@@ -82,6 +98,7 @@ def register(app: Client):
 
     @app.on_callback_query(filters.regex("^help$"))
     async def cb_help(client, cq: CallbackQuery):
+        await cq.answer()  # FIX #4
         try:
             await cq.message.edit_text(Messages.help_text(), reply_markup=Keyboards.back_to_start(), parse_mode=enums.ParseMode.HTML)
         except MessageNotModified:
@@ -89,6 +106,7 @@ def register(app: Client):
 
     @app.on_callback_query(filters.regex("^about$"))
     async def cb_about(client, cq: CallbackQuery):
+        await cq.answer()  # FIX #4
         try:
             await cq.message.edit_text(Messages.about_text(), reply_markup=Keyboards.back_to_start(), parse_mode=enums.ParseMode.HTML)
         except MessageNotModified:
@@ -96,9 +114,10 @@ def register(app: Client):
 
     @app.on_callback_query(filters.regex("^quota$"))
     async def cb_quota(client, cq: CallbackQuery):
+        await cq.answer()  # FIX #4
         user = await user_repo.find(cq.from_user.id)
         used = await user_repo.get_uploads_today(cq.from_user.id)
-        plan = user.plan.value if user else "free"
+        plan = user.plan if user else "free"
         limit = Config.FREE_UPLOADS_PER_DAY if plan == "free" else "∞"
         try:
             await cq.message.edit_text(Messages.quota_text(used, limit, plan), reply_markup=Keyboards.back_to_start(), parse_mode=enums.ParseMode.HTML)
@@ -107,10 +126,12 @@ def register(app: Client):
 
     @app.on_callback_query(filters.regex("^settings$"))
     async def cb_settings(client, cq: CallbackQuery):
+        await cq.answer()  # FIX #4
         await _send_settings(client, cq.from_user.id, cq.message.chat.id, cq.message)
 
     @app.on_callback_query(filters.regex("^premium$"))
     async def cb_premium(client, cq: CallbackQuery):
+        await cq.answer()  # FIX #4
         await cq.message.edit_text(
             "💎 <b>Premium Plan</b>\n\n✅ Unlimited uploads/day\n✅ Private & Unlisted\n✅ Priority queue\n✅ Custom descriptions\n\nTap below to upgrade!",
             reply_markup=Keyboards.premium(), parse_mode=enums.ParseMode.HTML
@@ -118,28 +139,40 @@ def register(app: Client):
 
     @app.on_callback_query(filters.regex(r"^history:(\d+)$"))
     async def cb_history(client, cq: CallbackQuery):
+        await cq.answer()  # FIX #4
         page = int(cq.matches[0].group(1))
         await _send_history(client, cq.from_user.id, cq.message.chat.id, page, edit_message=cq.message)
 
     @app.on_callback_query(filters.regex("^back_start$"))
     async def cb_back_start(client, cq: CallbackQuery):
+        await cq.answer()  # FIX #4
         user = await user_repo.find(cq.from_user.id)
         connected = bool(user and user.youtube_connected)
-        try:
-            await cq.message.edit_caption(
-                caption=Messages.start_caption(mention=cq.from_user.mention, connected=connected),
-                reply_markup=Keyboards.start(cq.from_user.id, connected),
-                parse_mode=enums.ParseMode.HTML
-            )
-        except Exception:
-            await cq.message.edit_text(
-                Messages.start_caption(mention=cq.from_user.mention, connected=connected),
-                reply_markup=Keyboards.start(cq.from_user.id, connected),
-                parse_mode=enums.ParseMode.HTML
-            )
+        caption = Messages.start_caption(mention=cq.from_user.mention, connected=connected)
+        kb = Keyboards.start(cq.from_user.id, connected)
+        # FIX #6: check message type explicitly instead of catching generic exceptions
+        if cq.message.photo or cq.message.document or cq.message.video:
+            try:
+                await cq.message.edit_caption(
+                    caption=caption,
+                    reply_markup=kb,
+                    parse_mode=enums.ParseMode.HTML
+                )
+            except MessageNotModified:
+                pass
+        else:
+            try:
+                await cq.message.edit_text(
+                    caption,
+                    reply_markup=kb,
+                    parse_mode=enums.ParseMode.HTML
+                )
+            except MessageNotModified:
+                pass
 
     @app.on_callback_query(filters.regex("^close$"))
     async def cb_close(client, cq: CallbackQuery):
+        await cq.answer()  # FIX #4
         await cq.message.delete()
 
     @app.on_callback_query(filters.regex(r"^set_default_privacy:(\w+)$"))
@@ -147,14 +180,14 @@ def register(app: Client):
         privacy = cq.matches[0].group(1)
         await user_repo.upsert(cq.from_user.id, {"settings.privacy": privacy})
         await _send_settings(client, cq.from_user.id, cq.message.chat.id, cq.message)
-        await cq.answer(f"Default privacy: {privacy}")
+        await cq.answer(f"Default privacy: {privacy}")  # FIX #4
 
     @app.on_callback_query(filters.regex(r"^set_lang:(\w+)$"))
     async def cb_set_lang(client, cq: CallbackQuery):
         lang = cq.matches[0].group(1)
         await user_repo.upsert(cq.from_user.id, {"settings.lang": lang})
         await _send_settings(client, cq.from_user.id, cq.message.chat.id, cq.message)
-        await cq.answer("Language updated!")
+        await cq.answer("Language updated!")  # FIX #4
 
     @app.on_callback_query(filters.regex("^toggle_autotitle$"))
     async def cb_toggle_autotitle(client, cq: CallbackQuery):
@@ -162,7 +195,7 @@ def register(app: Client):
         current = user.get_settings().get("auto_title", True) if user else True
         await user_repo.upsert(cq.from_user.id, {"settings.auto_title": not current})
         await _send_settings(client, cq.from_user.id, cq.message.chat.id, cq.message)
-        await cq.answer("Auto-title toggled!")
+        await cq.answer("Auto-title toggled!")  # FIX #4
 
     @app.on_callback_query(filters.regex("^noop$"))
     async def cb_noop(client, cq: CallbackQuery):
@@ -170,6 +203,7 @@ def register(app: Client):
 
     @app.on_callback_query(filters.regex("^mgr_open$"))
     async def cb_manage_open(client, cq: CallbackQuery):
+        await cq.answer()  # FIX #4
         msg = await cq.message.edit_text("⏳ Fetching your videos...")
         try:
             from services.youtube_manager import get_my_videos

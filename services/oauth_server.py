@@ -94,6 +94,25 @@ async def callback(request: Request):
         else:
             await _save()
 
+        # FIX #5: notify the user in Telegram that their account is now connected
+        async def _notify():
+            try:
+                from core.bot import get_app
+                bot = get_app()
+                from utils.keyboards import Keyboards
+                await bot.send_message(
+                    telegram_id,
+                    "✅ <b>YouTube Connected!</b>\n\n"
+                    "Your channel is linked. Just send me a video to upload.",
+                    parse_mode="html",
+                    reply_markup=Keyboards.back_to_start()
+                )
+            except Exception as notify_err:
+                log.warning(f"Could not send connect notification to {telegram_id}: {notify_err}")
+
+        if _main_loop and _main_loop.is_running():
+            asyncio.run_coroutine_threadsafe(_notify(), _main_loop)
+
         log.info(f"YouTube connected for user {telegram_id}")
 
         return HTMLResponse("""

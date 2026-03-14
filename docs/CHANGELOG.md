@@ -5,7 +5,120 @@ Format: `[vX.Y.Z] — YYYY-MM-DD`
 
 ---
 
-## [v2.5.0] — 2026-03-14
+## [v2.6.0] — 2026-03-14
+
+### Added
+
+- **`/disconnect`** — users can now unlink their YouTube account from the bot.
+  Wipes `youtube_token` and sets `youtube_connected: false` in the DB via the new
+  `user_repo.clear_youtube_token()` method. Previously there was no way to unlink
+  without admin DB intervention.
+
+- **`user_repo.clear_youtube_token()`** — new repository method that nulls out the
+  stored OAuth token and marks the user as disconnected.
+
+- **`user_repo.iter_all_ids()`** — memory-safe async generator for broadcast.
+  Yields one `telegram_id` at a time from a Motor cursor instead of loading the
+  entire user collection into a Python list (`to_list(length=None)`), which would
+  OOM the process at scale.
+
+- **`database/db.py` — `ensure_indexes()`** — creates all required MongoDB indexes
+  on startup (idempotent — safe to call every boot). Indexes added:
+  - `uploads.telegram_id`
+  - `uploads.status`
+  - `uploads.created_at`
+  - `uploads.(telegram_id, created_at)` compound
+  - `users.youtube_connected`
+  - `users.is_banned`
+
+- **Post-OAuth Telegram notification** — after a user completes the Google OAuth
+  flow in the browser, the bot now sends them a `"✅ YouTube Connected!"` message
+  in Telegram. Previously the browser showed a success page but the bot was silent,
+  leaving users confused about whether the connection worked.
+
+### Fixed
+
+- **`UploadStatus` stored as enum object, not string** — `queue_worker.py` was
+  writing `{"status": UploadStatus.FAILED}` (the Python enum object) to MongoDB
+  instead of `{"status": "failed"}` (the string value). This caused `get_stuck_jobs()`
+  and all status-based queries to silently miss records. Fixed by using `.value`
+  on all status writes in `queue_worker.py` and `main.py` (`recover_stuck_jobs`).
+
+- **`model_config = {"use_enum_values": True}`** added to `User` and `Upload` Pydantic
+  models — ensures enum fields are always serialized as their string values when
+  `model_dump()` is called for DB insertion. Prevents the enum-vs-string mismatch
+  from recurring as the codebase grows.
+
+- **Downloaded temp file never deleted on successful upload** — `process_job` called
+  `msg.download()` and stored the local path, then passed it to `upload_to_youtube()`.
+  The uploader's `finally` block only cleans up files *it* downloads internally; the
+  outer `process_job` temp file was never removed. Fixed with a `finally` block in
+  `process_job` that deletes `file_path` after the upload (success or failure).
+
+- **Thumbnail temp file never deleted** — `fsm_photo_router` downloaded the photo,
+  called `set_thumbnail()`, and never cleaned up the local image. Fixed with a
+  `finally` block that removes the downloaded path regardless of outcome.
+
+- **SRT caption temp file never deleted** — `fsm_document_router` downloaded the
+  `.srt` file and stored the path in FSM state. After `upload_caption()` completed
+  (resolved in `fsm_text_router`), the file on disk was never removed. Fixed with a
+  `finally` block wrapping the `upload_caption()` call.
+
+- **`cq.answer()` missing from all callback handlers** — Telegram shows a loading
+  spinner on every inline button press until `answer()` is called (or it times out
+  after ~5s). Every `@on_callback_query` handler in `start.py`, `video.py`,
+  `admin.py`, and `manage.py` was missing this call. Added `await cq.answer()` as
+  the first line in all 40+ handlers.
+
+- **`cb_back_start` swallowed unrelated exceptions** — the handler tried
+  `edit_caption()` and caught the resulting `Exception` to fall back to
+  `edit_text()`. Any non-`MessageNotModified` error (network, Telegram API) would
+  be silently swallowed. Fixed by checking `cq.message.photo` explicitly to decide
+  which edit method to call, then catching only `MessageNotModified`.
+
+- **`/cancel` in title-edit FSM left state if session expired** — `_pending_edit`
+  stored the pending key for the user; if the 10-minute `_pending` TTL had already
+  expired, the key was not in `_pending`, but `_pending_edit` still had the entry.
+  The handler would silently exit, leaving the user stuck in title-edit mode forever.
+  Fixed: `_pending_edit.pop(user_id)` is now always called first regardless of
+  whether `pending_key` is still alive in `_pending`.
+
+- **`quota_text()` crash for premium users** — `limit="∞"` (a string) was passed to
+  `make_progress_bar()` which tried integer arithmetic on it, raising `TypeError`.
+  Fixed with an `isinstance(limit, int)` guard before computing the progress
+  percentage.
+
+- **`sanitize_title()` stripped single quotes** — apostrophes in video titles
+  (`"Today's vlog"`, `"It's fine"`) were being silently removed. Single quotes are
+  valid in YouTube titles. Removed `'` from the forbidden character list; only
+  `<`, `>`, and `"` are stripped.
+
+- **`plan.value` calls removed from handlers** — with `use_enum_values: True` on
+  the Pydantic model, `user.plan` is already a plain string after DB round-trip.
+  Calling `.value` on it raises `AttributeError`. All `user.plan.value` references
+  in `start.py` and `admin.py` replaced with `user.plan`.
+
+- **`imports` ordering in `manage.py`** — `_safe_edit()` was defined between two
+  import blocks (after `from pyrogram import …` but before `from pyrogram.types
+  import …`). This is syntactically valid but confusing and a lint warning. All
+  imports moved to the top; `_safe_edit` defined after.
+
+- **Broadcast loaded all user IDs into RAM** — `get_all_ids()` called
+  `cursor.to_list(length=None)`, pulling every user document into a Python list
+  before iterating. Replaced broadcast loop with `iter_all_ids()` async generator
+  that streams one ID at a time from the Motor cursor.
+
+### Changed
+
+- **`config.py` — `GEMINI_API_KEY` fully removed** — `render.yaml` still declared this
+  env var even after v2.4.0 removed the Gemini integration, creating a confusing dead
+  config entry. Removed from `config.py`, `render.yaml`, and `core/env.example`.
+
+- **`core/env.example` — AI section removed** — `GEMINI_API_KEY` and `WHISPER_MODEL`
+  entries removed since both AI features were removed in v2.3.0 and v2.4.0.
+
+---
+
 
 ### Added
 
