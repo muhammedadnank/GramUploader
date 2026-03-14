@@ -142,7 +142,7 @@ async def process_job(app: Client, job: dict):
             f"✅ <b>Upload Complete!</b>\n\n"
             f"🎬 {title}\n"
             f"🔗 {youtube_url}",
-            parse_mode="html"
+            parse_mode="HTML"
         )
     except Exception:
         await app.send_message(chat_id, f"✅ Upload done!\n🔗 {youtube_url}")
