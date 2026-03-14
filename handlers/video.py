@@ -93,6 +93,9 @@ async def handle_video_upload(client: Client, message: Message):
     else:
         file_type = ext or "unknown"
 
+    # UPGRADE #5: capture duration from message.video if available
+    duration = getattr(message.video, "duration", None) if message.video else None
+
     # Quota warning: is this the last free upload today?
     quota_warning = False
     if plan == "free":
@@ -108,12 +111,14 @@ async def handle_video_upload(client: Client, message: Message):
         "size": media.file_size or 0,
         "privacy": default_privacy,
         "file_type": file_type,
+        "duration": duration,
         "_ts": time.time(),
     }
 
     await message.reply(
         Messages.upload_confirm(title, media.file_size or 0, default_privacy,
-                                file_type=file_type, quota_warning=quota_warning),
+                                file_type=file_type, quota_warning=quota_warning,
+                                duration=duration),
         reply_markup=Keyboards.upload_confirm(pending_key),
         parse_mode=enums.ParseMode.HTML
     )
@@ -131,6 +136,7 @@ def register(app: Client):
 
     @app.on_callback_query(filters.regex(r"^upload_confirm:(.+)$"))
     async def cb_upload_confirm(client: Client, cq: CallbackQuery):
+        await cq.answer()  # FIX #4
         pending_key = cq.matches[0].group(1)
         data = _pending.pop(pending_key, None)
 
@@ -168,6 +174,7 @@ def register(app: Client):
 
     @app.on_callback_query(filters.regex(r"^upload_cancel:(.+)$"))
     async def cb_upload_cancel(client: Client, cq: CallbackQuery):
+        await cq.answer()  # FIX #4
         pending_key = cq.matches[0].group(1)
         _pending.pop(pending_key, None)
         try:
@@ -177,6 +184,7 @@ def register(app: Client):
 
     @app.on_callback_query(filters.regex(r"^upload_privacy:(.+)$"))
     async def cb_upload_privacy(client: Client, cq: CallbackQuery):
+        await cq.answer()  # FIX #4
         pending_key = cq.matches[0].group(1)
         if pending_key not in _pending:
             await cq.answer("Session expired.", show_alert=True)
@@ -197,7 +205,8 @@ def register(app: Client):
         try:
             await cq.message.edit_text(
                 Messages.upload_confirm(data["title"], data["size"], privacy,
-                                        file_type=data.get("file_type", "")),
+                                        file_type=data.get("file_type", ""),
+                                        duration=data.get("duration")),
                 reply_markup=Keyboards.upload_confirm(pending_key),
                 parse_mode=enums.ParseMode.HTML
             )
@@ -207,6 +216,7 @@ def register(app: Client):
 
     @app.on_callback_query(filters.regex(r"^upload_back:(.+)$"))
     async def cb_upload_back(client: Client, cq: CallbackQuery):
+        await cq.answer()  # FIX #4
         pending_key = cq.matches[0].group(1)
         data = _pending.get(pending_key)
         if not data:
@@ -215,7 +225,8 @@ def register(app: Client):
         try:
             await cq.message.edit_text(
                 Messages.upload_confirm(data["title"], data["size"], data["privacy"],
-                                        file_type=data.get("file_type", "")),
+                                        file_type=data.get("file_type", ""),
+                                        duration=data.get("duration")),
                 reply_markup=Keyboards.upload_confirm(pending_key),
                 parse_mode=enums.ParseMode.HTML
             )
@@ -224,6 +235,7 @@ def register(app: Client):
 
     @app.on_callback_query(filters.regex(r"^upload_edit_title:(.+)$"))
     async def cb_upload_edit_title(client: Client, cq: CallbackQuery):
+        await cq.answer()  # FIX #4
         pending_key = cq.matches[0].group(1)
         if pending_key not in _pending:
             await cq.answer("Session expired.", show_alert=True)
