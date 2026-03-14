@@ -107,6 +107,8 @@ def register(app: Client):
     @app.on_callback_query(filters.regex(r"^mgr_video:(.+)$"))
     async def cb_video_panel(client: Client, cq: CallbackQuery):
         video_id = cq.matches[0].group(1)
+        # Clear any active FSM state when returning to video panel
+        clear_state(cq.from_user.id)
         await cq.message.edit_text("⏳ Loading video details...")
         try:
             video = await get_video_details(cq.from_user.id, video_id)
@@ -127,7 +129,10 @@ def register(app: Client):
             channel = await get_channel_stats(cq.from_user.id)
             await cq.message.edit_text(
                 ManagerMessages.channel_stats(channel),
-                reply_markup=Keyboards.back_to_start(),
+                reply_markup=InlineKeyboardMarkup([[
+                    InlineKeyboardButton("« Back to Videos", callback_data="mgr_list:"),
+                    InlineKeyboardButton("🏠 Menu", callback_data="back_start"),
+                ]]),
                 parse_mode=enums.ParseMode.HTML
             )
         except Exception as e:
@@ -227,7 +232,13 @@ def register(app: Client):
     async def cb_thumbnail(client: Client, cq: CallbackQuery):
         video_id = cq.matches[0].group(1)
         set_state(cq.from_user.id, STATE_THUMBNAIL, video_id=video_id)
-        await cq.message.edit_text(ManagerMessages.thumbnail_prompt(video_id), parse_mode=enums.ParseMode.HTML)
+        await cq.message.edit_text(
+            ManagerMessages.thumbnail_prompt(video_id),
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("« Back", callback_data=f"mgr_video:{video_id}")
+            ]]),
+            parse_mode=enums.ParseMode.HTML
+        )
 
     # ─── PLAYLISTS ──────────────────────────────────────────────
 
@@ -405,6 +416,12 @@ def register(app: Client):
             video = await get_video_details(cq.from_user.id, video_id)
             title = video["snippet"]["title"]
             await delete_video(cq.from_user.id, video_id)
-            await cq.message.edit_text(ManagerMessages.delete_done(title), parse_mode=enums.ParseMode.HTML)
+            await cq.message.edit_text(
+                ManagerMessages.delete_done(title),
+                reply_markup=InlineKeyboardMarkup([[
+                    InlineKeyboardButton("« Back to Videos", callback_data="mgr_list:")
+                ]]),
+                parse_mode=enums.ParseMode.HTML
+            )
         except Exception as e:
             await cq.answer(f"❌ {e}", show_alert=True)
