@@ -1,3 +1,4 @@
+import asyncio
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from google_auth_oauthlib.flow import Flow
@@ -60,7 +61,8 @@ async def callback(request: Request):
 
     try:
         flow = create_flow()
-        flow.fetch_token(code=code)
+        # fetch_token is a blocking network call — run in thread pool
+        await asyncio.to_thread(flow.fetch_token, code=code)
         creds = flow.credentials
 
         token = YouTubeToken(
