@@ -3,7 +3,6 @@ import urllib.parse
 import requests as _requests
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
-from database.db import user_repo
 from database.models import YouTubeToken
 from config import Config
 from utils.logger import log
@@ -11,15 +10,22 @@ import uvicorn
 
 app = FastAPI()
 
+# Main event loop reference — set from main.py after bot starts
+_main_loop: asyncio.AbstractEventLoop = None
+
 SCOPES = [
     "https://www.googleapis.com/auth/youtube.upload",
     "https://www.googleapis.com/auth/youtube",
 ]
 
 
+def set_main_loop(loop: asyncio.AbstractEventLoop):
+    global _main_loop
+    _main_loop = loop
+
+
 @app.get("/auth/{telegram_id}")
 async def auth(telegram_id: int):
-    """Redirect user to Google OAuth consent screen — no PKCE."""
     params = {
         "client_id": Config.GOOGLE_CLIENT_ID,
         "redirect_uri": Config.GOOGLE_REDIRECT_URI,
@@ -36,9 +42,8 @@ async def auth(telegram_id: int):
 
 @app.get("/callback")
 async def callback(request: Request):
-    """Handle Google OAuth2 callback, exchange code for token."""
     code = request.query_params.get("code")
-    state = request.query_params.get("state")  # telegram_id
+    state = request.query_params.get("state")
 
     if not code or not state:
         return HTMLResponse("<h2>❌ Authorization failed. Missing code or state.</h2>")
@@ -49,6 +54,7 @@ async def callback(request: Request):
         return HTMLResponse("<h2>❌ Invalid state parameter.</h2>")
 
     try:
+        # Token exchange — blocking, safe in thread
         def _exchange():
             resp = _requests.post(
                 "https://oauth2.googleapis.com/token",
@@ -72,8 +78,17 @@ async def callback(request: Request):
             client_secret=Config.GOOGLE_CLIENT_SECRET,
         )
 
-        await user_repo.set_youtube_token(telegram_id, token)
-        await user_repo.upsert(telegram_id, {"youtube_connected": True})
+        # Run DB calls on the main event loop (Motor requires its own loop)
+        async def _save():
+            from database.db import user_repo
+            await user_repo.set_youtube_token(telegram_id, token)
+            await user_repo.upsert(telegram_id, {"youtube_connected": True})
+
+        if _main_loop and _main_loop.is_running():
+            future = asyncio.run_coroutine_threadsafe(_save(), _main_loop)
+            future.result(timeout=10)
+        else:
+            await _save()
 
         log.info(f"YouTube connected for user {telegram_id}")
 
