@@ -33,6 +33,11 @@ async def _fetch_stats() -> dict:
     )
 
 
+def _admin_panel_kb():
+    """Admin panel keyboard with current maintenance state."""
+    return Keyboards.admin_panel(maintenance=Config.MAINTENANCE_MODE)
+
+
 def register(app: Client):
 
     # ─── /stats ─────────────────────────────────────────────────
@@ -42,7 +47,7 @@ def register(app: Client):
         s = await _fetch_stats()
         await message.reply(
             Messages.admin_stats(**s),
-            reply_markup=Keyboards.admin_panel(),
+            reply_markup=_admin_panel_kb(),
             parse_mode=enums.ParseMode.HTML
         )
 
@@ -223,7 +228,7 @@ def register(app: Client):
         try:
             await cq.message.edit_text(
                 Messages.admin_stats(**s),
-                reply_markup=Keyboards.admin_panel(),
+                reply_markup=_admin_panel_kb(),
                 parse_mode=enums.ParseMode.HTML
             )
         except Exception:
@@ -262,7 +267,7 @@ def register(app: Client):
         try:
             await cq.message.edit_text(
                 Messages.admin_stats(**s),
-                reply_markup=Keyboards.admin_panel(),
+                reply_markup=_admin_panel_kb(),
                 parse_mode=enums.ParseMode.HTML
             )
         except Exception:
@@ -276,7 +281,7 @@ def register(app: Client):
         try:
             await cq.message.edit_text(
                 Messages.admin_stats(**s),
-                reply_markup=Keyboards.admin_panel(),
+                reply_markup=_admin_panel_kb(),
                 parse_mode=enums.ParseMode.HTML
             )
         except Exception:
