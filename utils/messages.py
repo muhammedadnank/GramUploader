@@ -62,7 +62,7 @@ class Messages:
         return (
             "ℹ️ <b>About This Bot</b>\n\n"
             "🤖 <b>GramUploader</b>\n"
-            "📦 Version: 2.0.0\n\n"
+            "📦 Version: 2.4.0\n\n"
             "Upload your Telegram videos directly to\n"
             "YouTube with one click — no PC needed.\n\n"
             "⚙️ <b>Tech Stack:</b>\n"
