@@ -166,7 +166,6 @@ def register(app: Client):
             "🤖 <b>AI Tools</b>\n\nWhat do you want to generate?",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("✨ AI Metadata", callback_data="ai_metadata_start")],
-                [InlineKeyboardButton("🎙 AI Captions (Whisper)", callback_data="ai_caption_start")],
                 [InlineKeyboardButton("« Back", callback_data="back_start")],
             ]),
             parse_mode="html"
