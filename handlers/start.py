@@ -19,12 +19,21 @@ def register(app: Client):
             return
         user = await user_repo.find(message.from_user.id)
         connected = bool(user and user.youtube_connected)
-        await message.reply_photo(
-            photo=Config.START_IMAGE_URL,
-            caption=Messages.start_caption(mention=message.from_user.mention, connected=connected),
-            reply_markup=Keyboards.start(message.from_user.id, connected),
-            parse_mode=enums.ParseMode.HTML
-        )
+        caption = Messages.start_caption(mention=message.from_user.mention, connected=connected)
+        kb = Keyboards.start(message.from_user.id, connected)
+        try:
+            await message.reply_photo(
+                photo=Config.START_IMAGE_URL,
+                caption=caption,
+                reply_markup=kb,
+                parse_mode=enums.ParseMode.HTML
+            )
+        except Exception:
+            await message.reply(
+                caption,
+                reply_markup=kb,
+                parse_mode=enums.ParseMode.HTML
+            )
 
     @app.on_message(filters.command("connect") & filters.private)
     async def connect(client: Client, message: Message):
