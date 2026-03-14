@@ -216,23 +216,14 @@ class Messages:
         name = user.first_name or "—"
         username = f"@{user.username}" if user.username else "—"
         return (
-            f"👤 <b>User Info</b>
-
-"
-            f"ID: <code>{user.id}</code>
-"
-            f"Name: <b>{name}</b>
-"
-            f"Username: {username}
-"
-            f"Plan: <b>{plan}</b>
-"
-            f"Status: {status}
-"
-            f"YouTube: {connected}
-"
-            f"Uploads Today: <b>{uploads_today}</b>
-"
+            f"👤 <b>User Info</b>\n\n"
+            f"ID: <code>{user.id}</code>\n"
+            f"Name: <b>{name}</b>\n"
+            f"Username: {username}\n"
+            f"Plan: <b>{plan}</b>\n"
+            f"Status: {status}\n"
+            f"YouTube: {connected}\n"
+            f"Uploads Today: <b>{uploads_today}</b>\n"
             f"Total Uploads: <b>{total_uploads}</b>"
         )
 
