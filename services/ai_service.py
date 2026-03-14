@@ -1,17 +1,13 @@
 """
-AI Service — Gemini + Whisper
-- generate_metadata()  → AI title, description, tags from video filename/caption
-- generate_captions()  → Whisper speech-to-text → .srt file
+AI Service — Gemini
+- generate_metadata()  → AI title, description, tags from video hint
+- regenerate_title()   → Quick title regeneration
 """
 
 import asyncio
-import os
 import re
-import tempfile
 from utils.logger import log
 
-
-# ─── GEMINI ──────────────────────────────────────────────────────────────────
 
 def _get_gemini():
     from config import Config
@@ -85,111 +81,3 @@ async def regenerate_title(current_title: str, language: str = "en") -> str:
         return response.text.strip()[:100]
     except Exception as e:
         raise Exception(f"Title regeneration failed: {e}")
-
-
-# ─── WHISPER ──────────────────────────────────────────────────────────────────
-
-def _format_srt_time(seconds: float) -> str:
-    hours = int(seconds // 3600)
-    minutes = int((seconds % 3600) // 60)
-    secs = int(seconds % 60)
-    millis = int((seconds - int(seconds)) * 1000)
-    return f"{hours:02d}:{minutes:02d}:{secs:02d},{millis:03d}"
-
-
-def _segments_to_srt(segments: list) -> str:
-    srt_lines = []
-    for i, seg in enumerate(segments, start=1):
-        start = _format_srt_time(seg["start"])
-        end = _format_srt_time(seg["end"])
-        text = seg["text"].strip()
-        srt_lines.append(f"{i}\n{start} --> {end}\n{text}\n")
-    return "\n".join(srt_lines)
-
-
-async def generate_captions(
-    video_path: str,
-    language: str = None,
-    output_dir: str = None
-) -> dict:
-    """
-    Transcribe video audio using Whisper.
-    Returns: {srt_path, language_detected, duration_seconds, segment_count}
-
-    language: ISO code e.g. "en", "ml", "hi" — None = auto-detect
-    """
-    try:
-        try:
-            import whisper
-        except ImportError:
-            raise Exception("openai-whisper is not installed. Run: pip install openai-whisper")
-
-        from config import Config
-        model_name = Config.WHISPER_MODEL
-
-        log.info(f"Loading Whisper model: {model_name}")
-
-        import psutil
-        available_mb = psutil.virtual_memory().available / (1024 * 1024)
-        required = {"tiny": 400, "base": 500, "small": 1100, "medium": 3000, "large": 6000}
-        needed = required.get(model_name, 500)
-        if available_mb < needed:
-            raise Exception(
-                f"Not enough RAM for Whisper '{model_name}' model. "
-                f"Need ~{needed}MB, available {available_mb:.0f}MB. "
-                f"Set WHISPER_MODEL=tiny in .env"
-            )
-
-        model = await asyncio.to_thread(whisper.load_model, model_name)
-
-        # FIX: use os.path.splitext instead of brittle string replace
-        base, _ = os.path.splitext(video_path)
-        audio_path = base + "_audio.wav"
-
-        log.info(f"Extracting audio from: {video_path}")
-        proc = await asyncio.create_subprocess_exec(
-            "ffmpeg", "-y", "-i", video_path,
-            "-vn", "-acodec", "pcm_s16le", "-ar", "16000", "-ac", "1",
-            audio_path,
-            stdout=asyncio.subprocess.DEVNULL,
-            stderr=asyncio.subprocess.DEVNULL
-        )
-        await proc.wait()
-
-        if proc.returncode != 0:
-            raise Exception("ffmpeg audio extraction failed")
-
-        log.info("Transcribing with Whisper...")
-        transcribe_kwargs = {"verbose": False}
-        if language:
-            transcribe_kwargs["language"] = language
-
-        result = await asyncio.to_thread(
-            lambda: model.transcribe(audio_path, **transcribe_kwargs)
-        )
-
-        srt_content = _segments_to_srt(result["segments"])
-        detected_lang = result.get("language", "en")
-        duration = result["segments"][-1]["end"] if result["segments"] else 0
-
-        out_dir = output_dir or os.path.dirname(video_path) or "/tmp"
-        srt_path = os.path.join(out_dir, f"captions_{detected_lang}.srt")
-        with open(srt_path, "w", encoding="utf-8") as f:
-            f.write(srt_content)
-
-        try:
-            os.remove(audio_path)
-        except Exception:
-            pass
-
-        log.info(f"Captions generated: {srt_path} ({detected_lang})")
-        return {
-            "srt_path": srt_path,
-            "language_detected": detected_lang,
-            "duration_seconds": duration,
-            "segment_count": len(result["segments"])
-        }
-
-    except Exception as e:
-        log.error(f"Whisper caption error: {e}")
-        raise Exception(f"Caption generation failed: {e}")
