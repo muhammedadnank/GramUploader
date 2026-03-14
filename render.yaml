@@ -3,10 +3,7 @@ services:
     name: gramuploader
     runtime: python
     buildCommand: |
-      apt-get update && apt-get install -y ffmpeg
       pip install -r requirements.txt
-      # To enable Whisper AI captions, uncomment the next line (requires ~2.5GB extra disk):
-      # pip install -r requirements-whisper.txt
     startCommand: python main.py
     envVars:
       - key: API_ID
@@ -37,8 +34,6 @@ services:
         value: "false"
       - key: GEMINI_API_KEY
         sync: false
-      - key: WHISPER_MODEL
-        value: tiny
       - key: START_IMAGE_URL
         sync: false
       - key: OWNER_URL
