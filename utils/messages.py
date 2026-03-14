@@ -3,9 +3,29 @@ All bot message templates — centralized.
 Use Messages.xxx() everywhere instead of hardcoding strings.
 """
 
+from datetime import datetime, timezone, timedelta
 from utils.formatters import make_progress_bar, format_size
 from config import Config
 from utils.fonts import sc
+
+
+# UPGRADE #10: file type → emoji map
+_FILE_TYPE_EMOJI = {
+    "mp4": "🎬", "mov": "🎬", "mkv": "📦", "webm": "🌐",
+    "avi": "📼", "wmv": "📼", "flv": "📼", "mpeg": "📼", "3gp": "📱",
+}
+
+
+def _dual_progress(dl_pct: int, ul_pct: int) -> str:
+    """UPGRADE #3: side-by-side download + upload progress bars."""
+    dl_bar = make_progress_bar(dl_pct)
+    ul_bar = make_progress_bar(ul_pct)
+    dl_label = "✅" if dl_pct >= 100 else f"<b>{dl_pct}%</b>"
+    ul_label = "✅" if ul_pct >= 100 else f"<b>{ul_pct}%</b>"
+    return (
+        f"📥 Download: {dl_bar} {dl_label}\n"
+        f"📤 Upload:   {ul_bar} {ul_label}"
+    )
 
 
 class Messages:
@@ -14,11 +34,19 @@ class Messages:
 
     @staticmethod
     def start_caption(mention: str, connected: bool) -> str:
-        status = (
-            "✅ YouTube Connected\nReady — just send me a video!"
-            if connected else
-            "⚠️ YouTube not linked yet.\nTap <b>Connect</b> below to get started."
-        )
+        # UPGRADE #1: different content for connected vs not
+        if connected:
+            status = (
+                "✅ <b>YouTube Connected</b>\n"
+                "━━━━━━━━━━━━━━━━━━━━━\n"
+                "Just send me a video to upload!"
+            )
+        else:
+            status = (
+                "⚠️ <b>YouTube not linked yet</b>\n"
+                "━━━━━━━━━━━━━━━━━━━━━\n"
+                "Tap <b>Connect YouTube</b> below to get started."
+            )
         return (
             f"{sc('hey')}, {mention}\n"
             f"{sc('welcome to gramuploader!')}\n\n"
@@ -31,7 +59,6 @@ class Messages:
             f"  ▸ Add captions &amp; thumbnails\n"
             f"  ▸ Organize into playlists\n"
             f"  ▸ Edit videos after upload\n\n"
-            f"๏ {sc('click on the how to use button to get information about my commands.')}\n\n"
             f"━━━━━━━━━━━━━━━━━━━━━\n"
             f"{status}\n"
             f"━━━━━━━━━━━━━━━━━━━━━"
@@ -39,6 +66,7 @@ class Messages:
 
     @staticmethod
     def help_text() -> str:
+        # UPGRADE #8: added /disconnect and /queue
         return (
             "📖 <b>How to use this bot:</b>\n\n"
             "<b>1. Connect YouTube</b>\n"
@@ -52,10 +80,13 @@ class Messages:
             "📋 <b>Commands:</b>\n"
             "   /start — Main menu\n"
             "   /connect — Link YouTube\n"
+            "   /disconnect — Unlink YouTube\n"
+            "   /manage — YouTube Studio panel\n"
             "   /history — Upload history\n"
             "   /quota — Today's usage\n"
+            "   /queue — Upload queue status\n"
             "   /settings — Preferences\n"
-            "   /cancel — Cancel current upload"
+            "   /cancel — Cancel current input"
         )
 
     @staticmethod
@@ -99,18 +130,33 @@ class Messages:
 
     @staticmethod
     def upload_confirm(title: str, size: int, privacy: str = "public",
-                       file_type: str = "", quota_warning: bool = False) -> str:
+                       file_type: str = "", quota_warning: bool = False,
+                       duration: int = None) -> str:
+        # UPGRADE #5: duration line
+        # UPGRADE #10: file type emoji
         privacy_emoji = {"public": "🌍", "private": "🔒", "unlisted": "🔗"}.get(privacy, "🌍")
         UNSUPPORTED = {"avi", "wmv", "flv", "3gp", "mpeg"}
+
         type_line = ""
         if file_type and file_type != "unknown":
+            ft_emoji = _FILE_TYPE_EMOJI.get(file_type, "🎞")
             warn = " ⚠️ <i>format may need re-encoding</i>" if file_type in UNSUPPORTED else ""
-            type_line = f"🎞 Type: <code>.{file_type}</code>{warn}\n"
+            type_line = f"{ft_emoji} Type: <code>.{file_type}</code>{warn}\n"
+
+        dur_line = ""
+        if duration and duration > 0:
+            m, s = divmod(duration, 60)
+            h, m = divmod(m, 60)
+            dur_str = f"{h}:{m:02d}:{s:02d}" if h else f"{m}:{s:02d}"
+            shorts_hint = " 📱 <i>Shorts eligible</i>" if duration <= 60 else ""
+            dur_line = f"⏱ Duration: <code>{dur_str}</code>{shorts_hint}\n"
+
         quota_line = "\n⚠️ <b>Last free upload today!</b> Upgrade for unlimited." if quota_warning else ""
         return (
             f"📹 <b>Video Detected!</b>\n\n"
             f"✏️ Title: <code>{title[:50]}</code>\n"
             f"📁 Size: <code>{format_size(size)}</code>\n"
+            f"{dur_line}"
             f"{type_line}"
             f"{privacy_emoji} Privacy: <b>{privacy.capitalize()}</b>"
             f"{quota_line}\n\n"
@@ -120,32 +166,38 @@ class Messages:
     # ─── PROGRESS ───────────────────────────────────────────────
 
     @staticmethod
-    def progress_downloading(percent: int, current: int, total: int) -> str:
-        bar = make_progress_bar(percent)
+    def progress_downloading(percent: int, current: int, total: int,
+                             speed: int = 0, eta: int = 0) -> str:
+        # UPGRADE #3: dual stage progress
+        from utils.formatters import format_eta
+        speed_line = f"⚡ {format_size(speed)}/s · {format_eta(eta)}\n" if speed > 0 else ""
         return (
             f"📥 <b>Downloading from Telegram...</b>\n\n"
-            f"{bar} <b>{percent}%</b>\n"
-            f"📁 {format_size(current)} / {format_size(total)}"
+            f"{_dual_progress(percent, 0)}\n"
+            f"📁 {format_size(current)} / {format_size(total)}\n"
+            f"{speed_line}"
         )
 
     @staticmethod
-    def progress_uploading(dl_done: bool, ul_percent: int) -> str:
-        dl_bar = make_progress_bar(100)
-        ul_bar = make_progress_bar(ul_percent)
+    def progress_uploading(dl_pct: int, ul_pct: int, eta: int = 0) -> str:
+        # UPGRADE #3: dual stage progress
+        from utils.formatters import format_eta
+        eta_line = f"⏱ {format_eta(eta)}\n" if eta > 0 else ""
         return (
-            f"📥 Download: {dl_bar} ✅\n"
             f"📤 <b>Uploading to YouTube...</b>\n\n"
-            f"{ul_bar} <b>{ul_percent}%</b>"
+            f"{_dual_progress(dl_pct, ul_pct)}\n"
+            f"{eta_line}"
         )
 
     @staticmethod
-    def upload_done(title: str, video_id: str) -> str:
+    def upload_done(title: str, video_id: str, privacy: str = "public") -> str:
         url = f"https://youtube.com/watch?v={video_id}"
+        privacy_emoji = {"public": "🌍", "private": "🔒", "unlisted": "🔗"}.get(privacy, "🌍")
         return (
             f"✅ <b>Upload Complete!</b>\n\n"
-            f"🎬 {title}\n"
-            f"🔗 {url}\n\n"
-            f"Tap the link to view your video."
+            f"🎬 <b>{title}</b>\n"
+            f"{privacy_emoji} {privacy.capitalize()}\n"
+            f"🔗 {url}"
         )
 
     @staticmethod
@@ -177,53 +229,98 @@ class Messages:
 
     @staticmethod
     def history_page(uploads: list, page: int, total_pages: int) -> str:
+        # UPGRADE #4: show date per upload
         text = f"📋 <b>Upload History</b> (Page {page}/{total_pages})\n\n"
         for u in uploads:
             emoji = {
                 "done": "✅", "failed": "❌",
                 "uploading": "📤", "downloading": "📥", "pending": "⏳"
             }.get(u.status, "❓")
-            title = (u.title or "Untitled")[:28]
+            title = (u.title or "Untitled")[:26]
+            date_str = ""
+            if hasattr(u, "created_at") and u.created_at:
+                try:
+                    date_str = f" <i>· {u.created_at.strftime('%d %b')}</i>"
+                except Exception:
+                    pass
             if u.youtube_id:
-                text += f"{emoji} <a href='https://youtube.com/watch?v={u.youtube_id}'>{title}</a>\n"
+                text += f"{emoji} <a href='https://youtube.com/watch?v={u.youtube_id}'>{title}</a>{date_str}\n"
             else:
-                text += f"{emoji} {title} — <i>{u.status}</i>\n"
+                text += f"{emoji} {title} — <i>{u.status}</i>{date_str}\n"
         return text.strip()
 
     # ─── QUOTA ──────────────────────────────────────────────────
 
     @staticmethod
     def quota_text(used: int, limit, plan: str) -> str:
+        # UPGRADE #6: countdown to midnight UTC reset
         limit_str = str(limit) if limit != -1 else "∞"
-        # FIX #11: limit may be "∞" (str) for premium — guard before arithmetic
         if isinstance(limit, int) and limit > 0:
             bar_pct = int((used / limit) * 100)
         else:
             bar_pct = 100 if plan != "free" else 0
         bar = make_progress_bar(bar_pct)
+
+        now_utc = datetime.now(timezone.utc)
+        midnight = (now_utc + timedelta(days=1)).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+        diff = midnight - now_utc
+        total_mins = int(diff.total_seconds() // 60)
+        h, m = divmod(total_mins, 60)
+        reset_str = f"{h}h {m:02d}m" if h else f"{m}m"
+
         return (
             f"📊 <b>Today's Usage</b>\n\n"
             f"Plan: <b>{plan.capitalize()}</b>\n"
             f"Uploads: <b>{used}</b> / <b>{limit_str}</b>\n"
-            f"{bar}\n\n"
+            f"{bar}\n"
+            f"🕐 Resets in <b>{reset_str}</b>\n\n"
             f"{'💎 Upgrade for unlimited uploads!' if plan == 'free' else '🌟 Premium active!'}"
         )
 
     # ─── SETTINGS ───────────────────────────────────────────────
 
     @staticmethod
-    def settings_text(privacy: str, lang: str, auto_title: bool) -> str:
+    def settings_text(privacy: str, lang: str, auto_title: bool,
+                      channel_name: str = None) -> str:
+        # UPGRADE #7: optional channel name
         p_emoji = {"public": "🌍", "private": "🔒", "unlisted": "🔗"}.get(privacy, "🌍")
+        channel_line = f"📺 Channel: <b>{channel_name}</b>\n" if channel_name else ""
         return (
             f"⚙️ <b>Settings</b>\n\n"
+            f"{channel_line}"
             f"{p_emoji} Default Privacy: <b>{privacy.capitalize()}</b>\n"
             f"🌐 Language: <b>{'English' if lang == 'en' else 'Malayalam'}</b>\n"
             f"✏️ Auto-title from caption: <b>{'ON' if auto_title else 'OFF'}</b>"
         )
 
+    # ─── ADMIN ──────────────────────────────────────────────────
+
+    @staticmethod
+    def admin_stats(
+        total_users: int, connected: int,
+        total_uploads: int, uploads_today: int,
+        success_rate: float, active_keys: int,
+        queue_size: int = 0,
+    ) -> str:
+        # UPGRADE #9: show queue size
+        queue_line = f"⏳ Queue: <b>{queue_size}</b> pending\n" if queue_size > 0 else ""
+        return (
+            f"📊 <b>Bot Statistics</b>\n\n"
+            f"👥 Total Users: <b>{total_users}</b>\n"
+            f"🔗 Connected: <b>{connected}</b>\n"
+            f"📤 Total Uploads: <b>{total_uploads}</b>\n"
+            f"📅 Today: <b>{uploads_today}</b>\n"
+            f"✅ Success Rate: <b>{success_rate:.1f}%</b>\n"
+            f"🔑 API Keys: <b>{active_keys} active</b>\n"
+            f"{queue_line}"
+        )
+
     @staticmethod
     def admin_user_info(user, uploads_today: int, total_uploads: int) -> str:
-        plan = user.plan.value.capitalize()
+        # UPGRADE #11: safe plan access whether string or enum
+        plan = (user.plan if isinstance(user.plan, str) else user.plan.value).capitalize()
         status = "🚫 Banned" if user.is_banned else "✅ Active"
         connected = "✅ Yes" if user.youtube_connected else "❌ No"
         name = user.first_name or "—"
@@ -238,6 +335,14 @@ class Messages:
             f"YouTube: {connected}\n"
             f"Uploads Today: <b>{uploads_today}</b>\n"
             f"Total Uploads: <b>{total_uploads}</b>"
+        )
+
+    @staticmethod
+    def broadcast_confirm(count: int) -> str:
+        return (
+            f"📢 <b>Broadcast Confirmation</b>\n\n"
+            f"This will send to <b>{count}</b> users.\n"
+            f"Are you sure?"
         )
 
     # ─── ERRORS ─────────────────────────────────────────────────
@@ -281,29 +386,3 @@ class Messages:
     @staticmethod
     def maintenance() -> str:
         return "🔧 Bot is under maintenance. Please try later."
-
-    # ─── ADMIN ──────────────────────────────────────────────────
-
-    @staticmethod
-    def admin_stats(
-        total_users: int, connected: int,
-        total_uploads: int, uploads_today: int,
-        success_rate: float, active_keys: int
-    ) -> str:
-        return (
-            f"📊 <b>Bot Statistics</b>\n\n"
-            f"👥 Total Users: <b>{total_users}</b>\n"
-            f"🔗 Connected: <b>{connected}</b>\n"
-            f"📤 Total Uploads: <b>{total_uploads}</b>\n"
-            f"📅 Today: <b>{uploads_today}</b>\n"
-            f"✅ Success Rate: <b>{success_rate:.1f}%</b>\n"
-            f"🔑 API Keys: <b>{active_keys} active</b>"
-        )
-
-    @staticmethod
-    def broadcast_confirm(count: int) -> str:
-        return (
-            f"📢 <b>Broadcast Confirmation</b>\n\n"
-            f"This will send to <b>{count}</b> users.\n"
-            f"Are you sure?"
-        )
