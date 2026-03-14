@@ -1,4 +1,3 @@
-import asyncio
 import time
 from pyrogram import Client, filters
 from pyrogram.types import Message, CallbackQuery
@@ -8,13 +7,16 @@ from services.queue_worker import enqueue, queue_size
 from core.middlewares import apply_middlewares
 from utils.messages import Messages
 from utils.keyboards import Keyboards
-from utils.validators import is_valid_video, is_within_size_limit, sanitize_title
+from utils.validators import is_within_size_limit, sanitize_title
 from utils.formatters import format_size
 from utils.logger import log
 from config import Config
 
 # Temp store for pending confirmations {pending_key: {data..., _ts: float}}
 _pending: dict = {}
+
+# Per-user upload title edit FSM {user_id: pending_key}
+_pending_edit: dict = {}
 
 # TTL for pending confirmations (10 minutes)
 _PENDING_TTL = 600
@@ -30,15 +32,15 @@ def _cleanup_pending():
 
 async def handle_video_upload(client: Client, message: Message):
     """
-    Core video upload logic — callable from fsm_router when a document is
-    received and no FSM state matches.
+    Core video/document upload logic.
+    Called directly for filters.video messages, and from fsm_router as a
+    fallback when a document arrives with no active FSM state.
     """
     if not await apply_middlewares(client, message):
         return
 
     user = await user_repo.find(message.from_user.id)
 
-    # YouTube connected check
     if not user or not user.youtube_connected:
         await message.reply(
             Messages.not_connected(),
@@ -47,7 +49,6 @@ async def handle_video_upload(client: Client, message: Message):
         )
         return
 
-    # Daily quota check
     uploads_today = await user_repo.get_uploads_today(message.from_user.id)
     plan = user.plan.value
     if plan == "free" and uploads_today >= Config.FREE_UPLOADS_PER_DAY:
@@ -60,7 +61,6 @@ async def handle_video_upload(client: Client, message: Message):
 
     media = message.video or message.document
 
-    # Size check
     if not is_within_size_limit(media.file_size or 0):
         await message.reply(
             Messages.file_too_large(media.file_size or 0, Config.MAX_FILE_SIZE_MB),
@@ -78,7 +78,6 @@ async def handle_video_upload(client: Client, message: Message):
     )
     title = sanitize_title(raw_title)
 
-    # Cleanup stale pending entries
     _cleanup_pending()
 
     pending_key = f"{message.from_user.id}:{message.id}"
@@ -102,16 +101,11 @@ async def handle_video_upload(client: Client, message: Message):
 
 def register(app: Client):
 
-    @app.on_message(
-        (filters.video | filters.document) & filters.private
-    )
+    # Only filters.video here — documents are handled by fsm_router
+    # (which checks FSM state first, then falls back to handle_video_upload)
+    @app.on_message(filters.video & filters.private)
     async def handle_video(client: Client, message: Message):
-        # fsm_router handles documents when FSM state is active.
-        # For plain video messages (filters.video) always route here.
-        # For documents with no active FSM state, fsm_router calls handle_video_upload directly.
-        if message.video:
-            await handle_video_upload(client, message)
-        # documents: fsm_router will call handle_video_upload after checking FSM state
+        await handle_video_upload(client, message)
 
     # ─── CONFIRMATION CALLBACKS ─────────────────────────────────
 
@@ -142,6 +136,9 @@ def register(app: Client):
             "chat_id": data["chat_id"],
             "title": data["title"],
             "privacy": data["privacy"],
+            # Pass along AI-generated metadata if present
+            "description": data.get("ai_description", ""),
+            "tags": data.get("ai_tags", []),
         })
 
         await cq.message.edit_text(
@@ -194,32 +191,18 @@ def register(app: Client):
             parse_mode="html"
         )
 
-    # ─── EDIT TITLE inline (before upload) ──────────────────────
-
     @app.on_callback_query(filters.regex(r"^upload_edit_title:(.+)$"))
     async def cb_upload_edit_title(client: Client, cq: CallbackQuery):
         pending_key = cq.matches[0].group(1)
         if pending_key not in _pending:
             await cq.answer("Session expired.", show_alert=True)
             return
-        # Store edit-title state for this user in manage FSM
-        from handlers.manage import set_state
-        # Reuse a dedicated lightweight state key
-        from handlers.video import _pending as pnd
-        # Signal the fsm_router that we're in "edit upload title" mode
-        _pending[pending_key]["_edit_title"] = True
+        current_title = _pending[pending_key]["title"]
+        _pending_edit[cq.from_user.id] = pending_key
         await cq.message.edit_text(
             f"✏️ <b>Edit Title</b>\n\n"
-            f"Current: <code>{_pending[pending_key]['title'][:80]}</code>\n\n"
-            f"Send the new title as a message.\nSend /cancel to abort.",
+            f"Current: <code>{current_title[:80]}</code>\n\n"
+            f"Send the new title as a message.\n"
+            f"Send /cancel to abort.",
             parse_mode="html"
         )
-        # Use a dedicated per-user edit state in _pending_edit
-        _pending_edit[cq.from_user.id] = pending_key
-
-    # per-user dict mapping user_id -> pending_key for title-edit FSM
-    # (Accessed from fsm_router below via handlers.video._pending_edit)
-
-
-# Module-level dict for upload title edit FSM state
-_pending_edit: dict = {}
