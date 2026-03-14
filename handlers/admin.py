@@ -1,4 +1,5 @@
 from pyrogram import Client, filters
+from pyrogram import enums
 from pyrogram.types import Message, CallbackQuery
 from database.db import user_repo, upload_repo, apikey_repo
 from database.models import UploadStatus
@@ -28,7 +29,7 @@ def register(app: Client):
         await message.reply(
             Messages.admin_stats(total_users, connected, total_uploads, uploads_today, success_rate, active_keys),
             reply_markup=Keyboards.admin_panel(),
-            parse_mode="HTML"
+            parse_mode=enums.ParseMode.HTML
         )
 
     @app.on_message(filters.command("addkey") & is_admin)
@@ -80,7 +81,7 @@ def register(app: Client):
         await message.reply(
             Messages.broadcast_confirm(count),
             reply_markup=Keyboards.broadcast_confirm(),
-            parse_mode="HTML"
+            parse_mode=enums.ParseMode.HTML
         )
 
     @app.on_callback_query(filters.regex("^broadcast_confirm$") & is_admin)
@@ -102,7 +103,7 @@ def register(app: Client):
 
         await cq.message.edit_text(
             f"📢 <b>Broadcast Done</b>\n\n✅ Sent: {success}\n❌ Failed: {failed}",
-            parse_mode="HTML"
+            parse_mode=enums.ParseMode.HTML
         )
 
     @app.on_callback_query(filters.regex("^broadcast_cancel$") & is_admin)
@@ -123,7 +124,7 @@ def register(app: Client):
         await cq.message.edit_text(
             Messages.admin_stats(total_users, connected, total_uploads, uploads_today, success_rate, active_keys),
             reply_markup=Keyboards.admin_panel(),
-            parse_mode="HTML"
+            parse_mode=enums.ParseMode.HTML
         )
 
     @app.on_callback_query(filters.regex("^admin_broadcast$") & is_admin)
@@ -133,7 +134,7 @@ def register(app: Client):
             "Reply to any message with /broadcast to send it to all users.\n\n"
             "<i>Go back and use the /broadcast command while replying to a message.</i>",
             reply_markup=Keyboards.back_to_start(),
-            parse_mode="HTML"
+            parse_mode=enums.ParseMode.HTML
         )
 
     @app.on_callback_query(filters.regex("^admin_keys$") & is_admin)
@@ -149,7 +150,7 @@ def register(app: Client):
                 short = k.get("key", "")[:12] + "..."
                 lines.append(f"{status} <code>{short}</code> — {used}/8000 units")
             text = "🔑 <b>API Keys</b>\n\n" + "\n".join(lines)
-        await cq.message.edit_text(text, reply_markup=Keyboards.back_to_start(), parse_mode="HTML")
+        await cq.message.edit_text(text, reply_markup=Keyboards.back_to_start(), parse_mode=enums.ParseMode.HTML)
 
     @app.on_callback_query(filters.regex("^admin_maintenance_on$") & is_admin)
     async def cb_maintenance_on(client: Client, cq: CallbackQuery):
