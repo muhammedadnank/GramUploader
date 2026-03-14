@@ -1,12 +1,11 @@
 # GramUploader
 
-Upload Telegram videos directly to YouTube — with AI metadata, YouTube Studio-like management panel, and live progress.
+Upload Telegram videos directly to YouTube — with a YouTube Studio-like management panel and live progress.
 
 ## Features
 
 - **Upload** videos from Telegram to YouTube with live progress
 - **Manage** existing YouTube videos (edit, delete, thumbnail, captions, playlists)
-- **AI Tools** — title, description & tags via Gemini
 - **Confirmation screen** before upload — set title, edit title inline, privacy, cancel
 - **Queue system** — multiple uploads handled sequentially
 - **Free / Premium** plan support with daily upload limits
@@ -19,7 +18,6 @@ Upload Telegram videos directly to YouTube — with AI metadata, YouTube Studio-
 |-------|---------|
 | Telegram MTProto | Kurigram (Pyrogram fork) |
 | YouTube API | Google API Python Client v3 |
-| AI Metadata | Gemini 1.5 Flash (free tier) |
 | Database | MongoDB Atlas (Motor async) |
 | OAuth2 Server | FastAPI + Uvicorn |
 | Deploy | Azure ACI · Render · Railway |
@@ -55,7 +53,6 @@ GramUploader/
 │   ├── __init__.py                # register_all() — callbacks first, fsm_router last
 │   ├── fsm_router.py              # Central FSM: sole text/photo/document handler
 │   ├── manage.py                  # /manage — YouTube Studio panel (callbacks only)
-│   ├── ai.py                      # /ai — Gemini metadata + Whisper (callbacks only)
 │   ├── start.py                   # /start /connect /history /quota /settings
 │   ├── video.py                   # Video upload handler + confirmation flow
 │   └── admin.py                   # /stats /ban /broadcast /addkey
@@ -64,7 +61,6 @@ GramUploader/
 │   ├── queue_worker.py            # Background upload queue processor
 │   ├── youtube_uploader.py        # Resumable YouTube upload + token refresh
 │   ├── youtube_manager.py         # YouTube Studio API (edit/delete/captions/playlists)
-│   ├── ai_service.py              # Gemini metadata + Whisper transcription
 │   └── oauth_server.py            # FastAPI Google OAuth2 callback server
 │
 ├── utils/
@@ -109,12 +105,7 @@ GramUploader/
 - Create free cluster at https://mongodb.com/atlas
 - Get connection string → set as `MONGO_URI`
 
-### 4. Gemini API Key (AI features)
-
-- Visit https://aistudio.google.com → Create API key (free tier available)
-- Set as `GEMINI_API_KEY`
-
-### 5. Environment Variables
+### 4. Environment Variables
 
 ```bash
 cp .env.example .env
@@ -152,15 +143,11 @@ PREMIUM_URL=https://t.me/yoursupport
 # OAuth server (optional — defaults work for most deploys)
 OAUTH_SERVER_HOST=0.0.0.0
 OAUTH_SERVER_PORT=8080
-
-# AI
-GEMINI_API_KEY=your_gemini_api_key
 ```
 
-### 6. Install & Run Locally
+### 5. Install & Run Locally
 
 ```bash
-# First time — installs ffmpeg, creates venv, checks .env
 chmod +x setup_local.sh run.sh
 ./setup_local.sh
 
@@ -171,7 +158,6 @@ chmod +x setup_local.sh run.sh
 Or manually:
 
 ```bash
-sudo apt-get install -y ffmpeg          # required for Whisper
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
@@ -207,13 +193,6 @@ chmod +x deploy.sh
 ./deploy.sh
 ```
 
-The script will:
-1. Create Resource Group + Container Registry
-2. Build & push Docker image
-3. Show OAuth redirect URI → add to Google Console, press Enter
-4. Deploy container with all env vars
-5. Print management commands
-
 **Useful commands**
 
 ```bash
@@ -247,15 +226,12 @@ az container delete -g bots-rg -n gramuploader --yes
 
 **3. Set Environment Variables**
 
-In Render dashboard → Environment, fill these values:
-
 ```
 API_ID, API_HASH, BOT_TOKEN, ADMIN_IDS
 MONGO_URI
 GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET
 GOOGLE_REDIRECT_URI = https://gramuploader.onrender.com/callback
 OAUTH_BASE_URL      = https://gramuploader.onrender.com
-GEMINI_API_KEY
 START_IMAGE_URL, OWNER_URL, SUPPORT_URL, PREMIUM_URL
 ```
 
@@ -263,11 +239,7 @@ START_IMAGE_URL, OWNER_URL, SUPPORT_URL, PREMIUM_URL
 
 Add `https://gramuploader.onrender.com/callback` to Authorized redirect URIs.
 
-**5. Deploy**
-
-Render will run `buildCommand` from `render.yaml` (installs `ffmpeg` + Python deps) then start `python main.py`.
-
-> ℹ️ The bot will sleep after 15 minutes of inactivity on free tier — first message after sleep may be slow.
+> ℹ️ The bot will sleep after 15 minutes of inactivity on free tier.
 
 ---
 
@@ -290,7 +262,6 @@ Set all env vars in Railway dashboard → Variables.
 | `/start` | Main menu |
 | `/connect` | Link YouTube channel via Google OAuth |
 | `/manage` | YouTube Studio panel |
-| `/ai` | AI Tools (Gemini metadata + Whisper captions) |
 | `/history` | Recent upload history (paginated) |
 | `/quota` | Today's upload usage |
 | `/settings` | Preferences: privacy, language, auto-title |
@@ -315,7 +286,6 @@ Set all env vars in Railway dashboard → Variables.
   └── Connect YouTube → Google OAuth2
         └── Send video
               └── Confirmation screen
-                    ├── ✨ AI Suggest → Gemini generates title/desc/tags
                     ├── ✏️ Edit Title → send new title as message
                     ├── 🔒 Privacy → Public / Private / Unlisted
                     └── Upload Now → Queue → Download → Upload → YouTube link
@@ -338,39 +308,23 @@ Set all env vars in Railway dashboard → Variables.
         └── 🗑 Delete (with confirmation)
 ```
 
-## AI Tools
-
-```
-/ai
-  └── ✨ AI Metadata → send hint → Gemini generates title + description + tags
-```
-
-For captions, use /manage → 📝 Captions to upload your own `.srt` file directly to YouTube.
-
 ---
 
 ## Architecture Note — FSM Routing
 
-Pyrogram fires the **first** matching handler and ignores all subsequent ones. This means multiple
-handlers registered for the same filter (e.g. `filters.text & filters.private`) will conflict.
-
-GramUploader solves this with a dedicated `handlers/fsm_router.py` which is registered **last** and
-acts as the sole handler for text, photo, and document messages. It routes based on per-user state:
+Pyrogram fires the **first** matching handler and ignores all subsequent ones. GramUploader solves this with a dedicated `handlers/fsm_router.py` registered **last**, acting as the sole handler for text, photo, and document messages. It routes based on per-user state:
 
 ```
 Text message received
-  ├── user in _pending_edit?     → upload title edit
-  ├── AI state == WAIT_HINT?     → Gemini metadata generation
-  └── manage state active?       → edit title / desc / tags / schedule / playlist / caption lang
+  ├── user in _pending_edit?        → upload title edit
+  └── manage state active?          → edit title / desc / tags / schedule / playlist / caption lang
 
 Document received
-  ├── AI state == WAIT_VIDEO?    → Whisper transcription
   ├── manage state == CAPTION_FILE? → .srt caption upload
-  └── (no state)                 → normal video upload flow
+  └── (no state)                    → normal video upload flow
 ```
 
-All command handlers (`/start`, `/manage`, `/ai`, etc.) and callback query handlers are registered
-before `fsm_router`, so they always take priority.
+All command and callback query handlers are registered before `fsm_router`, so they always take priority.
 
 ---
 
@@ -427,4 +381,4 @@ refactor: move progress bar to formatters
 
 See [docs/CHANGELOG.md](docs/CHANGELOG.md) for full version history.
 
-Latest: **v2.3.0** · [v2.2.0] · [v2.1.0] · [v2.0.0] · [v1.0.0]
+Latest: **v2.4.0** · [v2.3.0] · [v2.2.0] · [v2.1.0] · [v2.0.0] · [v1.0.0]
