@@ -5,6 +5,28 @@ Format: `[vX.Y.Z] — YYYY-MM-DD`
 
 ---
 
+## [v2.3.0] — 2026-03-14
+
+### Removed
+
+- **Whisper AI captions removed** — `openai-whisper` depended on PyTorch (~2.5 GB install),
+  making Render builds fail (2 GB disk limit exceeded) and causing OOM crashes on any instance
+  with less than 512 MB free RAM. The feature has been removed entirely until a lighter
+  alternative (e.g. `faster-whisper`) is integrated.
+  - `services/ai_service.py` — `generate_captions()`, `_format_srt_time()`, `_segments_to_srt()` removed
+  - `handlers/ai.py` — `STATE_WAIT_VIDEO`, `cb_caption_start` handler removed
+  - `handlers/fsm_router.py` — Whisper document FSM branch removed
+  - `config.py` — `WHISPER_MODEL` env var removed
+  - `render.yaml` — `WHISPER_MODEL` env var removed; `apt-get install ffmpeg` removed from buildCommand
+  - `requirements.txt` — `openai-whisper`, `ffmpeg-python` removed
+  - `requirements-whisper.txt` — deleted
+  - `handlers/start.py` — "🎙 AI Captions (Whisper)" button removed from `/ai` menu
+
+- Manual `.srt` caption upload via `/manage → 📝 Captions` is **not affected** — that feature
+  uploads user-provided subtitle files directly to YouTube and has no dependency on Whisper.
+
+---
+
 ## [v2.2.0] — 2026-03-14
 
 ### Critical Bug Fixes
