@@ -19,12 +19,5 @@ python-dotenv
 pydantic
 psutil
 
-# AI — metadata (always installed)
+# AI â€” metadata
 google-generativeai
-
-# AI — Whisper captions (optional — pulls ~2.5GB torch)
-# Uncomment only if you have enough disk space during build (local or Azure).
-# On Render free tier, leave this commented — AI captions will show a clear
-# error message if a user tries to use them.
-# openai-whisper
-# ffmpeg-python
