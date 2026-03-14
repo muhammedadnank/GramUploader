@@ -1,8 +1,8 @@
 """
 Central FSM Router
 ==================
-All text / photo / document FSM state handling is here so that Pyrogram
-registers exactly ONE handler per filter type instead of multiple conflicting ones.
+Sole handler for filters.text, filters.photo, filters.document in private chats.
+Registered LAST in handlers/__init__.py so all command/callback handlers take priority.
 
 Priority order (text messages):
   1. Upload title edit  (video._pending_edit)
@@ -10,9 +10,11 @@ Priority order (text messages):
   3. Manage FSM         (manage._states  edit/schedule/playlist/caption)
 
 Priority order (document messages):
-  1. AI Whisper video   (ai._ai_states  STATE_WAIT_VIDEO)
-  2. Manage caption SRT (manage._states STATE_CAPTION_FILE)
-  3. Video upload       (fallback → handle_video_upload)
+  1. Manage caption SRT (manage._states STATE_CAPTION_FILE)
+  2. Video upload       (fallback → handle_video_upload)
+
+Priority order (photo messages):
+  1. Manage thumbnail   (manage._states STATE_THUMBNAIL)
 """
 
 from pyrogram import Client, filters
@@ -181,52 +183,7 @@ def register(app: Client):
     async def fsm_document_router(client: Client, message: Message):
         user_id = message.from_user.id
 
-        # ── 1. AI Whisper caption (video/doc in STATE_WAIT_VIDEO) ───────────
-        from handlers.ai import get_ai_state, clear_ai_state, STATE_WAIT_VIDEO
-        ai_state = get_ai_state(user_id)
-        if ai_state and ai_state.get("state") == STATE_WAIT_VIDEO:
-            clear_ai_state(user_id)
-            media = message.document
-            size_mb = (media.file_size or 0) / (1024 * 1024)
-            if size_mb > 500:
-                await message.reply("❌ File too large for AI captions. Max 500MB.")
-                return
-            msg = await message.reply(
-                f"🎙 <b>Transcribing audio...</b>\n\n"
-                f"📁 {size_mb:.1f} MB — this may take a few minutes.",
-                parse_mode="html"
-            )
-            try:
-                file_path = await message.download()
-                await msg.edit_text("🎙 Audio extracted. Transcribing with Whisper...")
-                from services.ai_service import generate_captions
-                result = await generate_captions(file_path)
-                lang = result["language_detected"]
-                segments = result["segment_count"]
-                duration = int(result["duration_seconds"])
-                await message.reply_document(
-                    document=result["srt_path"],
-                    caption=(
-                        f"✅ <b>Captions Ready!</b>\n\n"
-                        f"🌐 Language: <b>{lang}</b>\n"
-                        f"📝 Segments: <b>{segments}</b>\n"
-                        f"⏱ Duration: <b>{duration}s</b>\n\n"
-                        f"Upload this .srt to YouTube via /manage → 📝 Captions"
-                    ),
-                    parse_mode="html"
-                )
-                await msg.delete()
-                import os
-                for p in [file_path, result["srt_path"]]:
-                    try:
-                        os.remove(p)
-                    except Exception:
-                        pass
-            except Exception as e:
-                await msg.edit_text(f"❌ Caption generation failed: {e}")
-            return
-
-        # ── 2. Manage FSM: .srt caption file ───────────────────────────────
+        # ── 1. Manage FSM: .srt caption file ───────────────────────────────
         from handlers.manage import get_state, set_state, STATE_CAPTION_FILE, STATE_CAPTION_LANG
         state_data = get_state(user_id)
         if state_data and state_data.get("state") == STATE_CAPTION_FILE:
@@ -241,6 +198,6 @@ def register(app: Client):
             await message.reply(ManagerMessages.caption_lang_prompt(), parse_mode="html")
             return
 
-        # ── 3. Fallback: normal video/document upload ───────────────────────
+        # ── 2. Fallback: normal video/document upload ───────────────────────
         from handlers.video import handle_video_upload
         await handle_video_upload(client, message)
