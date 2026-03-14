@@ -1,15 +1,21 @@
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from google_auth_oauthlib.flow import Flow
-from database.db import save_youtube_token, upsert_user
+from database.db import user_repo
+from database.models import YouTubeToken
 from config import Config
+from utils.logger import log
 import uvicorn
 
 app = FastAPI()
 
-SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
+SCOPES = [
+    "https://www.googleapis.com/auth/youtube.upload",
+    "https://www.googleapis.com/auth/youtube",
+]
 
-def create_flow():
+
+def create_flow() -> Flow:
     return Flow.from_client_config(
         {
             "web": {
@@ -27,7 +33,7 @@ def create_flow():
 
 @app.get("/auth/{telegram_id}")
 async def auth(telegram_id: int):
-    """Generate Google OAuth URL for user"""
+    """Redirect user to Google OAuth consent screen."""
     flow = create_flow()
     auth_url, _ = flow.authorization_url(
         access_type="offline",
@@ -35,49 +41,66 @@ async def auth(telegram_id: int):
         state=str(telegram_id),
         prompt="consent"
     )
-    from fastapi.responses import RedirectResponse
     return RedirectResponse(auth_url)
 
 
 @app.get("/callback")
 async def callback(request: Request):
-    """Handle Google OAuth callback"""
+    """Handle Google OAuth2 callback, save token to DB."""
     code = request.query_params.get("code")
     state = request.query_params.get("state")  # telegram_id
 
     if not code or not state:
-        return HTMLResponse("<h2>❌ Authorization failed.</h2>")
+        return HTMLResponse("<h2>❌ Authorization failed. Missing code or state.</h2>")
 
-    telegram_id = int(state)
+    try:
+        telegram_id = int(state)
+    except ValueError:
+        return HTMLResponse("<h2>❌ Invalid state parameter.</h2>")
 
-    flow = create_flow()
-    flow.fetch_token(code=code)
-    creds = flow.credentials
+    try:
+        flow = create_flow()
+        flow.fetch_token(code=code)
+        creds = flow.credentials
 
-    # Save token to MongoDB
-    await save_youtube_token(telegram_id, {
-        "access_token": creds.token,
-        "refresh_token": creds.refresh_token,
-        "client_id": Config.GOOGLE_CLIENT_ID,
-        "client_secret": Config.GOOGLE_CLIENT_SECRET,
-    })
+        token = YouTubeToken(
+            access_token=creds.token,
+            refresh_token=creds.refresh_token or "",
+            client_id=Config.GOOGLE_CLIENT_ID,
+            client_secret=Config.GOOGLE_CLIENT_SECRET,
+        )
 
-    await upsert_user(telegram_id, {"youtube_connected": True})
+        # Save token + mark connected
+        await user_repo.set_youtube_token(telegram_id, token)
+        await user_repo.upsert(telegram_id, {"youtube_connected": True})
 
-    return HTMLResponse("""
-        <html>
-        <body style="font-family:sans-serif;text-align:center;padding:50px">
-            <h2>✅ YouTube Connected!</h2>
-            <p>Go back to Telegram and send a video to upload.</p>
-        </body>
-        </html>
-    """)
+        log.info(f"YouTube connected for user {telegram_id}")
+
+        return HTMLResponse("""
+            <html>
+            <head><meta charset="utf-8"></head>
+            <body style="font-family:sans-serif;text-align:center;padding:60px;background:#0f0f0f;color:#fff">
+                <h2>✅ YouTube Connected!</h2>
+                <p style="color:#aaa">Go back to Telegram and send a video to upload.</p>
+                <p style="margin-top:30px;font-size:13px;color:#555">You can close this window.</p>
+            </body>
+            </html>
+        """)
+
+    except Exception as e:
+        log.error(f"OAuth callback error for user {state}: {e}")
+        return HTMLResponse(f"<h2>❌ Error: {e}</h2>")
 
 
 @app.get("/health")
 async def health():
-    return {"status": "ok"}
+    return {"status": "ok", "service": "GramUploader OAuth"}
 
 
 def run_oauth_server():
-    uvicorn.run(app, host=Config.OAUTH_SERVER_HOST, port=Config.OAUTH_SERVER_PORT)
+    uvicorn.run(
+        app,
+        host=Config.OAUTH_SERVER_HOST,
+        port=Config.OAUTH_SERVER_PORT,
+        log_level="warning"
+    )
