@@ -1,21 +1,23 @@
 from pyrogram import filters
-from pyrogram.types import Message
 from config import Config
 
 
 def admin_filter():
-    async def func(_, __, message: Message):
-        return message.from_user and message.from_user.id in Config.ADMIN_IDS
+    async def func(_, __, update):
+        # Works for both Message and CallbackQuery — both have .from_user
+        user = getattr(update, "from_user", None)
+        return user is not None and user.id in Config.ADMIN_IDS
     return filters.create(func)
 
 
 def youtube_connected_filter():
     from database.db import user_repo
-    async def func(_, __, message: Message):
-        if not message.from_user:
+    async def func(_, __, update):
+        user = getattr(update, "from_user", None)
+        if not user:
             return False
-        user = await user_repo.find(message.from_user.id)
-        return user is not None and user.youtube_connected
+        db_user = await user_repo.find(user.id)
+        return db_user is not None and db_user.youtube_connected
     return filters.create(func)
 
 
