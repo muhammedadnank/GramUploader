@@ -4,6 +4,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+VERSION = "2.5.0"
+
+
 class Config:
     API_ID = int(os.getenv("API_ID", 0))
     API_HASH = os.getenv("API_HASH", "")

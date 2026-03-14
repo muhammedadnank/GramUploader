@@ -1,14 +1,15 @@
 import asyncio
+import time
 from collections import deque
 from pyrogram import Client
-from pyrogram.errors import MessageNotModified
 from pyrogram import enums
+from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from database.db import upload_repo
 from database.models import UploadStatus
 from services.youtube_uploader import upload_to_youtube
-from utils.formatters import make_progress_bar, format_size
+from utils.formatters import make_progress_bar, format_size, format_eta
 from utils.logger import log
-from bson import ObjectId
+from config import Config
 
 # In-memory queue (use Redis for production)
 upload_queue: deque = deque()
@@ -42,7 +43,12 @@ async def start_worker(app: Client):
                 try:
                     await app.send_message(
                         job["telegram_id"],
-                        f"❌ Upload failed: {str(e)}"
+                        f"❌ <b>Upload Failed</b>\n\n<code>{str(e)[:200]}</code>",
+                        parse_mode=enums.ParseMode.HTML,
+                        reply_markup=InlineKeyboardMarkup([
+                            [InlineKeyboardButton("📋 History", callback_data="history:1")],
+                            [InlineKeyboardButton("💬 Support ↗", url=Config.SUPPORT_URL)],
+                        ])
                     )
                 except Exception as notify_err:
                     log.error(f"Failed to notify user: {notify_err}")
@@ -66,8 +72,11 @@ async def process_job(app: Client, job: dict):
 
     await upload_repo.update(upload_id, {"status": UploadStatus.DOWNLOADING})
 
-    # Download progress
+    # Download progress with speed + ETA
     last_dl_progress = [0]
+    dl_start_time = [time.time()]
+    dl_last_bytes = [0]
+    dl_last_time = [time.time()]
 
     async def download_progress(current, total):
         if total == 0:
@@ -75,14 +84,23 @@ async def process_job(app: Client, job: dict):
         percent = int((current / total) * 100)
         if percent - last_dl_progress[0] >= 10:
             last_dl_progress[0] = percent
+            now = time.time()
+            elapsed = now - dl_last_time[0]
+            speed = (current - dl_last_bytes[0]) / elapsed if elapsed > 0 else 0
+            dl_last_bytes[0] = current
+            dl_last_time[0] = now
+            remaining = (total - current) / speed if speed > 0 else 0
             bar = make_progress_bar(percent)
             try:
                 await status_msg.edit_text(
-                    f"📥 Downloading...\n{bar} {percent}%\n"
-                    f"📁 {format_size(current)} / {format_size(total)}"
+                    f"📥 <b>Downloading...</b>\n"
+                    f"{bar} <b>{percent}%</b>\n"
+                    f"📁 {format_size(current)} / {format_size(total)}\n"
+                    f"⚡ {format_size(int(speed))}/s · {format_eta(int(remaining))}",
+                    parse_mode=enums.ParseMode.HTML
                 )
             except Exception:
-                pass  # Ignore flood wait on edit
+                pass
             await upload_repo.update(upload_id, {"progress_download": percent})
 
     # Download file
@@ -99,23 +117,31 @@ async def process_job(app: Client, job: dict):
 
     try:
         await status_msg.edit_text(
-            f"✅ Downloaded!\n📤 Uploading to YouTube...\n"
-            f"{make_progress_bar(0)} 0%"
+            f"✅ Downloaded!\n"
+            f"📤 <b>Uploading to YouTube...</b>\n"
+            f"{make_progress_bar(0)} <b>0%</b>",
+            parse_mode=enums.ParseMode.HTML
         )
     except Exception:
         pass
 
-    # Upload progress
+    # Upload progress with ETA
     last_ul_progress = [0]
+    ul_start_time = [time.time()]
 
     async def upload_progress(percent: int):
         if percent - last_ul_progress[0] >= 10:
             last_ul_progress[0] = percent
+            elapsed = time.time() - ul_start_time[0]
+            remaining = (elapsed / percent * (100 - percent)) if percent > 0 else 0
             bar = make_progress_bar(percent)
             try:
                 await status_msg.edit_text(
-                    f"✅ Downloaded!\n📤 Uploading to YouTube...\n"
-                    f"{bar} {percent}%"
+                    f"✅ Downloaded!\n"
+                    f"📤 <b>Uploading to YouTube...</b>\n"
+                    f"{bar} <b>{percent}%</b>\n"
+                    f"⏱ {format_eta(int(remaining))}",
+                    parse_mode=enums.ParseMode.HTML
                 )
             except Exception:
                 pass
@@ -142,9 +168,23 @@ async def process_job(app: Client, job: dict):
     try:
         await status_msg.edit_text(
             f"✅ <b>Upload Complete!</b>\n\n"
-            f"🎬 {title}\n"
-            f"🔗 {youtube_url}",
-            parse_mode=enums.ParseMode.HTML
+            f"🎬 <b>{title}</b>\n"
+            f"🔒 {privacy.capitalize()}",
+            parse_mode=enums.ParseMode.HTML,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔗 Watch on YouTube ↗", url=youtube_url)],
+                [
+                    InlineKeyboardButton("🎬 Manage Video", callback_data=f"mgr_video:{video_id}"),
+                    InlineKeyboardButton("📋 History", callback_data="history:1"),
+                ],
+            ])
         )
     except Exception:
-        await app.send_message(chat_id, f"✅ Upload done!\n🔗 {youtube_url}")
+        await app.send_message(
+            chat_id,
+            f"✅ <b>Upload done!</b>\n\n🎬 {title}\n🔗 {youtube_url}",
+            parse_mode=enums.ParseMode.HTML,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔗 Watch on YouTube ↗", url=youtube_url)],
+            ])
+        )

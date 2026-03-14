@@ -13,6 +13,21 @@ def format_size(size_bytes: int) -> str:
         return f"{size_bytes / (1024 * 1024 * 1024):.2f} GB"
 
 
+def format_eta(seconds: int) -> str:
+    """Format seconds into human-readable ETA string."""
+    if seconds <= 0:
+        return "almost done"
+    if seconds < 60:
+        return f"{seconds}s left"
+    minutes = seconds // 60
+    secs = seconds % 60
+    if minutes < 60:
+        return f"{minutes}m {secs:02d}s left"
+    hours = minutes // 60
+    mins = minutes % 60
+    return f"{hours}h {mins:02d}m left"
+
+
 def format_status_emoji(status: str) -> str:
     return {
         "done": "✅",
@@ -23,17 +38,4 @@ def format_status_emoji(status: str) -> str:
     }.get(status, "❓")
 
 
-def format_upload_history(uploads: list) -> str:
-    if not uploads:
-        return "📭 No uploads yet."
-
-    text = "📋 **Recent Uploads:**\n\n"
-    for u in uploads:
-        emoji = format_status_emoji(u.status)
-        yt_link = (
-            f"[Watch](https://youtube.com/watch?v={u.youtube_id})"
-            if u.youtube_id else "-"
-        )
-        title = (u.title or "Untitled")[:30]
-        text += f"{emoji} **{title}**\n└ {yt_link}\n\n"
-    return text.strip()
+# format_upload_history() removed — was dead code using Markdown, not HTML

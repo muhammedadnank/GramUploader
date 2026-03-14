@@ -114,10 +114,8 @@ class Keyboards:
         buttons = []
         if nav:
             buttons.append(nav)
-        buttons.append([
-            InlineKeyboardButton("🔄 Refresh", callback_data=f"history:{page}"),
-            InlineKeyboardButton("« Back", callback_data="back_start")
-        ])
+        buttons.append([InlineKeyboardButton("🔄 Refresh", callback_data=f"history:{page}")])
+        buttons.append([InlineKeyboardButton("« Back", callback_data="back_start")])
         return InlineKeyboardMarkup(buttons)
 
     # ─── SETTINGS ───────────────────────────────────────────────

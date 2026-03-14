@@ -58,6 +58,22 @@ def register(app: Client):
         limit = Config.FREE_UPLOADS_PER_DAY if plan == "free" else "∞"
         await message.reply(Messages.quota_text(used, limit, plan), reply_markup=Keyboards.back_to_start(), parse_mode=enums.ParseMode.HTML)
 
+    @app.on_message(filters.command("queue") & filters.private)
+    async def queue_cmd(client: Client, message: Message):
+        if not await apply_middlewares(client, message):
+            return
+        from services.queue_worker import queue_size
+        size = queue_size()
+        if size == 0:
+            text = "📭 <b>Queue is empty</b>\n\nNo uploads pending."
+        else:
+            text = (
+                f"📊 <b>Upload Queue</b>\n\n"
+                f"⏳ Pending: <b>{size}</b> upload{'s' if size > 1 else ''}\n\n"
+                f"Your upload will be processed in order."
+            )
+        await message.reply(text, reply_markup=Keyboards.back_to_start(), parse_mode=enums.ParseMode.HTML)
+
     @app.on_message(filters.command("settings") & filters.private)
     async def settings_cmd(client: Client, message: Message):
         if not await apply_middlewares(client, message):

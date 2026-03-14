@@ -83,6 +83,22 @@ async def handle_video_upload(client: Client, message: Message):
     _cleanup_pending()
 
     pending_key = f"{message.from_user.id}:{message.id}"
+    # File type detection
+    file_name = getattr(media, "file_name", None) or ""
+    ext = file_name.rsplit(".", 1)[-1].lower() if "." in file_name else ""
+    if message.video:
+        file_type = "mp4"
+    elif ext in ("mp4", "mov", "avi", "mkv", "wmv", "flv", "webm", "mpeg", "3gp"):
+        file_type = ext
+    else:
+        file_type = ext or "unknown"
+
+    # Quota warning: is this the last free upload today?
+    quota_warning = False
+    if plan == "free":
+        if uploads_today == Config.FREE_UPLOADS_PER_DAY - 1:
+            quota_warning = True
+
     _pending[pending_key] = {
         "telegram_id": message.from_user.id,
         "message_id": message.id,
@@ -91,11 +107,13 @@ async def handle_video_upload(client: Client, message: Message):
         "title": title,
         "size": media.file_size or 0,
         "privacy": default_privacy,
+        "file_type": file_type,
         "_ts": time.time(),
     }
 
     await message.reply(
-        Messages.upload_confirm(title, media.file_size or 0, default_privacy),
+        Messages.upload_confirm(title, media.file_size or 0, default_privacy,
+                                file_type=file_type, quota_warning=quota_warning),
         reply_markup=Keyboards.upload_confirm(pending_key),
         parse_mode=enums.ParseMode.HTML
     )
@@ -174,7 +192,8 @@ def register(app: Client):
         _pending[pending_key]["privacy"] = privacy
         data = _pending[pending_key]
         await cq.message.edit_text(
-            Messages.upload_confirm(data["title"], data["size"], privacy),
+            Messages.upload_confirm(data["title"], data["size"], privacy,
+                                    file_type=data.get("file_type", "")),
             reply_markup=Keyboards.upload_confirm(pending_key),
             parse_mode=enums.ParseMode.HTML
         )
@@ -188,7 +207,8 @@ def register(app: Client):
             await cq.answer("Session expired.", show_alert=True)
             return
         await cq.message.edit_text(
-            Messages.upload_confirm(data["title"], data["size"], data["privacy"]),
+            Messages.upload_confirm(data["title"], data["size"], data["privacy"],
+                                    file_type=data.get("file_type", "")),
             reply_markup=Keyboards.upload_confirm(pending_key),
             parse_mode=enums.ParseMode.HTML
         )

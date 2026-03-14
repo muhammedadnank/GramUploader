@@ -4,6 +4,7 @@ Use Messages.xxx() everywhere instead of hardcoding strings.
 """
 
 from utils.formatters import make_progress_bar, format_size
+from config import Config
 from utils.fonts import sc
 
 
@@ -62,7 +63,7 @@ class Messages:
         return (
             "ℹ️ <b>About This Bot</b>\n\n"
             "🤖 <b>GramUploader</b>\n"
-            "📦 Version: 2.4.0\n\n"
+            f"📦 Version: {Config.VERSION}\n\n"
             "Upload your Telegram videos directly to\n"
             "YouTube with one click — no PC needed.\n\n"
             "⚙️ <b>Tech Stack:</b>\n"
@@ -97,13 +98,22 @@ class Messages:
     # ─── UPLOAD CONFIRMATION ────────────────────────────────────
 
     @staticmethod
-    def upload_confirm(title: str, size: int, privacy: str = "public") -> str:
+    def upload_confirm(title: str, size: int, privacy: str = "public",
+                       file_type: str = "", quota_warning: bool = False) -> str:
         privacy_emoji = {"public": "🌍", "private": "🔒", "unlisted": "🔗"}.get(privacy, "🌍")
+        UNSUPPORTED = {"avi", "wmv", "flv", "3gp", "mpeg"}
+        type_line = ""
+        if file_type and file_type != "unknown":
+            warn = " ⚠️ <i>format may need re-encoding</i>" if file_type in UNSUPPORTED else ""
+            type_line = f"🎞 Type: <code>.{file_type}</code>{warn}\n"
+        quota_line = "\n⚠️ <b>Last free upload today!</b> Upgrade for unlimited." if quota_warning else ""
         return (
             f"📹 <b>Video Detected!</b>\n\n"
+            f"✏️ Title: <code>{title[:50]}</code>\n"
             f"📁 Size: <code>{format_size(size)}</code>\n"
-            f"{privacy_emoji} Privacy: <b>{privacy.capitalize()}</b>\n"
-            f"✏️ Title: <code>{title[:50]}</code>\n\n"
+            f"{type_line}"
+            f"{privacy_emoji} Privacy: <b>{privacy.capitalize()}</b>"
+            f"{quota_line}\n\n"
             f"Tap <b>Upload Now</b> to proceed."
         )
 

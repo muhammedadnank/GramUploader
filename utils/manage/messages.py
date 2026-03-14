@@ -9,8 +9,7 @@ class ManagerMessages:
     @staticmethod
     def video_list_header(total: int) -> str:
         return (
-            f"🎬 <b>My Videos</b>\n\n"
-            f"📊 Showing your uploaded videos.\n"
+            f"🎬 <b>My Videos</b> ({total})\n\n"
             f"Tap any video to manage it."
         )
 
@@ -22,7 +21,8 @@ class ManagerMessages:
         cd = video.get("contentDetails", {})
 
         title = s.get("title", "Untitled")
-        description = (s.get("description") or "")[:100]
+        raw_desc = s.get("description") or ""
+        description = raw_desc[:100]
         privacy = st.get("privacyStatus", "unknown")
         privacy_emoji = {"public": "🌍", "private": "🔒", "unlisted": "🔗"}.get(privacy, "❓")
         duration = format_duration(cd.get("duration", "PT0S"))
@@ -49,7 +49,7 @@ class ManagerMessages:
             f"  👍 Likes: <b>{likes}</b>\n"
             f"  💬 Comments: <b>{comments}</b>\n\n"
             f"🏷 <b>Tags:</b> <i>{tags_str}</i>\n"
-            f"📝 <b>Desc:</b> <i>{description or 'Empty'}{'...' if len(s.get('description','')) > 100 else ''}</i>\n\n"
+            f"📝 <b>Desc:</b> <i>{description or 'Empty'}{'…' if len(raw_desc) > 100 else ''}</i>\n\n"
             f"⚙️ Kids: {kids}  |  Embed: {embed}  |  License: {lic}"
         )
 

@@ -13,7 +13,7 @@ class ManagerKeyboards:
         buttons = []
         for v in videos:
             vid_id = v["id"]
-            title = v["snippet"]["title"][:32]
+            title = v["snippet"]["title"][:40]
             privacy = v["status"]["privacyStatus"]
             emoji = {"public": "🌍", "private": "🔒", "unlisted": "🔗"}.get(privacy, "❓")
             buttons.append([InlineKeyboardButton(

@@ -46,7 +46,8 @@ def register(app: Client):
                 from utils.keyboards import Keyboards
                 data = _pending[pending_key]
                 await message.reply(
-                    Messages.upload_confirm(data["title"], data["size"], data["privacy"]),
+                    Messages.upload_confirm(data["title"], data["size"], data["privacy"],
+                                            file_type=data.get("file_type", "")),
                     reply_markup=Keyboards.upload_confirm(pending_key),
                     parse_mode=enums.ParseMode.HTML
                 )
