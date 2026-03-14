@@ -3,42 +3,45 @@ import asyncio
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
-from googleapiclient.http import MediaFileUpload, MediaIoBaseUpload
+from googleapiclient.http import MediaFileUpload
 from googleapiclient.errors import HttpError
-from database.db import (
-    get_youtube_token, save_youtube_token,
-    get_active_api_key, increment_key_usage
-)
-import io
+from database.db import user_repo, apikey_repo
+from database.models import YouTubeToken
+from utils.logger import log
 
-SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
-UPLOAD_UNITS = 1600  # approximate units per upload
+SCOPES = [
+    "https://www.googleapis.com/auth/youtube.upload",
+    "https://www.googleapis.com/auth/youtube",
+]
+UPLOAD_UNITS = 1600  # approximate quota units per upload
 
 
 async def get_credentials(telegram_id: int) -> Credentials | None:
-    token_data = await get_youtube_token(telegram_id)
-    if not token_data:
+    """Get valid Google OAuth2 credentials for a user, auto-refreshing if expired."""
+    token: YouTubeToken = await user_repo.get_youtube_token(telegram_id)
+    if not token:
         return None
 
     creds = Credentials(
-        token=token_data.get("access_token"),
-        refresh_token=token_data.get("refresh_token"),
+        token=token.access_token,
+        refresh_token=token.refresh_token,
         token_uri="https://oauth2.googleapis.com/token",
-        client_id=token_data.get("client_id"),
-        client_secret=token_data.get("client_secret"),
+        client_id=token.client_id,
+        client_secret=token.client_secret,
         scopes=SCOPES
     )
 
-    # Auto refresh if expired
+    # Auto-refresh if expired
     if creds.expired and creds.refresh_token:
-        creds.refresh(Request())
-        # Save refreshed token
-        await save_youtube_token(telegram_id, {
-            "access_token": creds.token,
-            "refresh_token": creds.refresh_token,
-            "client_id": token_data.get("client_id"),
-            "client_secret": token_data.get("client_secret"),
-        })
+        await asyncio.to_thread(creds.refresh, Request())
+        # Save refreshed token back to DB
+        await user_repo.set_youtube_token(telegram_id, YouTubeToken(
+            access_token=creds.token,
+            refresh_token=creds.refresh_token,
+            client_id=token.client_id,
+            client_secret=token.client_secret,
+        ))
+        log.info(f"Token refreshed for user {telegram_id}")
 
     return creds
 
@@ -48,34 +51,38 @@ async def upload_to_youtube(
     file_path: str,
     title: str,
     description: str = "",
+    tags: list = None,
     privacy: str = "public",
+    category_id: str = "22",
     progress_callback=None
-) -> str | None:
+) -> str:
     """
-    Upload video to YouTube.
-    Returns YouTube video ID on success, None on failure.
+    Upload a video file to YouTube.
+    Returns YouTube video ID on success.
+    Raises Exception on failure.
     """
     creds = await get_credentials(telegram_id)
     if not creds:
         raise Exception("YouTube not connected. Use /connect first.")
 
     # Get active API key
-    api_key_doc = await get_active_api_key()
+    api_key_doc = await apikey_repo.get_active()
     if not api_key_doc:
-        raise Exception("YouTube quota exceeded for today. Try again tomorrow.")
+        raise Exception("No active YouTube API key. Ask admin to add one via /addkey.")
 
     try:
         youtube = build("youtube", "v3", credentials=creds)
 
         body = {
             "snippet": {
-                "title": title,
-                "description": description or "Uploaded via Telegram Bot",
-                "tags": ["telegram", "upload"],
-                "categoryId": "22"  # People & Blogs
+                "title": title[:100],
+                "description": description or "Uploaded via GramUploader",
+                "tags": tags or ["telegram", "gramuploader"],
+                "categoryId": category_id,
             },
             "status": {
-                "privacyStatus": privacy  # public / private / unlisted
+                "privacyStatus": privacy,
+                "selfDeclaredMadeForKids": False,
             }
         }
 
@@ -100,17 +107,23 @@ async def upload_to_youtube(
                 await progress_callback(progress)
 
         video_id = response.get("id")
+        if not video_id:
+            raise Exception("Upload succeeded but no video ID returned.")
 
         # Track quota usage
-        await increment_key_usage(api_key_doc["_id"], UPLOAD_UNITS)
+        await apikey_repo.increment_usage(api_key_doc["_id"], UPLOAD_UNITS)
+        log.info(f"Upload complete: {video_id} for user {telegram_id}")
 
         return video_id
 
     except HttpError as e:
         if e.resp.status == 403:
-            raise Exception("YouTube quota exceeded.")
-        raise Exception(f"YouTube upload failed: {e}")
+            raise Exception("YouTube quota exceeded. Try again tomorrow or ask admin to add a new API key.")
+        raise Exception(f"YouTube upload failed: {e.reason}")
     finally:
-        # Cleanup temp file
-        if os.path.exists(file_path):
-            os.remove(file_path)
+        # Always cleanup temp file
+        try:
+            if os.path.exists(file_path):
+                os.remove(file_path)
+        except Exception as cleanup_err:
+            log.warning(f"Could not delete temp file {file_path}: {cleanup_err}")
