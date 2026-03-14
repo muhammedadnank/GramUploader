@@ -11,7 +11,7 @@ import tempfile
 from utils.logger import log
 
 
-# ─── GEMINI ─────────────────────────────────────────────────────────────────
+# ─── GEMINI ──────────────────────────────────────────────────────────────────
 
 def _get_gemini():
     from config import Config
@@ -55,13 +55,11 @@ Return ONLY a JSON object with these exact keys (no markdown, no explanation):
         )
 
         raw = response.text.strip()
-        # Strip markdown code fences if present
         raw = re.sub(r"```json|```", "", raw).strip()
 
         import json
         data = json.loads(raw)
 
-        # Validate and sanitize
         title = str(data.get("title", title_hint))[:100]
         description = str(data.get("description", ""))[:5000]
         tags = [str(t).strip() for t in data.get("tags", []) if t][:15]
@@ -89,10 +87,9 @@ async def regenerate_title(current_title: str, language: str = "en") -> str:
         raise Exception(f"Title regeneration failed: {e}")
 
 
-# ─── WHISPER ─────────────────────────────────────────────────────────────────
+# ─── WHISPER ──────────────────────────────────────────────────────────────────
 
 def _format_srt_time(seconds: float) -> str:
-    """Convert float seconds to SRT timestamp format"""
     hours = int(seconds // 3600)
     minutes = int((seconds % 3600) // 60)
     secs = int(seconds % 60)
@@ -101,7 +98,6 @@ def _format_srt_time(seconds: float) -> str:
 
 
 def _segments_to_srt(segments: list) -> str:
-    """Convert Whisper segments list to SRT format string"""
     srt_lines = []
     for i, seg in enumerate(segments, start=1):
         start = _format_srt_time(seg["start"])
@@ -118,7 +114,7 @@ async def generate_captions(
 ) -> dict:
     """
     Transcribe video audio using Whisper.
-    Returns: {srt_path, language_detected, duration_seconds}
+    Returns: {srt_path, language_detected, duration_seconds, segment_count}
 
     language: ISO code e.g. "en", "ml", "hi" — None = auto-detect
     """
@@ -133,7 +129,6 @@ async def generate_captions(
 
         log.info(f"Loading Whisper model: {model_name}")
 
-        # RAM check — Whisper base needs ~500MB, small needs ~1GB
         import psutil
         available_mb = psutil.virtual_memory().available / (1024 * 1024)
         required = {"tiny": 400, "base": 500, "small": 1100, "medium": 3000, "large": 6000}
@@ -147,10 +142,9 @@ async def generate_captions(
 
         model = await asyncio.to_thread(whisper.load_model, model_name)
 
-        # Extract audio from video using ffmpeg
-        audio_path = video_path.replace(".mp4", ".wav").replace(".mkv", ".wav")
-        if audio_path == video_path:
-            audio_path = video_path + ".wav"
+        # FIX: use os.path.splitext instead of brittle string replace
+        base, _ = os.path.splitext(video_path)
+        audio_path = base + "_audio.wav"
 
         log.info(f"Extracting audio from: {video_path}")
         proc = await asyncio.create_subprocess_exec(
@@ -165,7 +159,6 @@ async def generate_captions(
         if proc.returncode != 0:
             raise Exception("ffmpeg audio extraction failed")
 
-        # Transcribe
         log.info("Transcribing with Whisper...")
         transcribe_kwargs = {"verbose": False}
         if language:
@@ -175,18 +168,15 @@ async def generate_captions(
             lambda: model.transcribe(audio_path, **transcribe_kwargs)
         )
 
-        # Build SRT
         srt_content = _segments_to_srt(result["segments"])
         detected_lang = result.get("language", "en")
         duration = result["segments"][-1]["end"] if result["segments"] else 0
 
-        # Save SRT file
         out_dir = output_dir or os.path.dirname(video_path) or "/tmp"
         srt_path = os.path.join(out_dir, f"captions_{detected_lang}.srt")
         with open(srt_path, "w", encoding="utf-8") as f:
             f.write(srt_content)
 
-        # Cleanup audio
         try:
             os.remove(audio_path)
         except Exception:
