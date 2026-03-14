@@ -9,7 +9,7 @@ from pyrogram import Client, filters
 from pyrogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from core.middlewares import apply_middlewares
 from services.ai_service import generate_metadata, generate_captions, regenerate_title
-from services.yt_manager import upload_caption
+from services.youtube_manager import upload_caption
 from utils.logger import log
 
 # FSM: pending AI jobs {user_id: {state, data}}
@@ -133,7 +133,7 @@ def register(app: Client):
 
         await cq.message.edit_text("⏳ Applying AI metadata to YouTube...")
         try:
-            from services.yt_manager import update_video
+            from services.youtube_manager import update_video
             updates = {}
             if description:
                 updates["description"] = description

@@ -174,9 +174,9 @@ async def _send_settings(client, telegram_id, chat_id, edit_message=None):
         from pyrogram.types import Message
         msg = await cq.message.edit_text("⏳ Fetching your videos...")
         try:
-            from services.yt_manager import get_my_videos
-            from utils.manager_keyboards import ManagerKeyboards
-            from utils.manager_messages import ManagerMessages
+            from services.youtube_manager import get_my_videos
+            from utils.manage.keyboards import ManagerKeyboards
+            from utils.manage.messages import ManagerMessages
             data = await get_my_videos(cq.from_user.id)
             videos = data["items"]
             if not videos:

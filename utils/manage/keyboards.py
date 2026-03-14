@@ -88,7 +88,7 @@ class ManagerKeyboards:
 
     @staticmethod
     def category(video_id: str, current_id: str = None) -> InlineKeyboardMarkup:
-        from services.yt_manager import CATEGORIES
+        from services.youtube_manager import CATEGORIES
         buttons = []
         row = []
         for cat_id, cat_name in CATEGORIES.items():

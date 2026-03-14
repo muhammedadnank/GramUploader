@@ -1,7 +1,7 @@
 """
 Manager panel message templates — YouTube Studio-like
 """
-from services.yt_manager import format_duration, format_count
+from services.youtube_manager import format_duration, format_count
 
 
 class ManagerMessages:

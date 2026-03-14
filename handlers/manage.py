@@ -6,15 +6,15 @@ Full video management: edit, delete, thumbnail, captions, playlists, stats
 from pyrogram import Client, filters
 from pyrogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from core.middlewares import apply_middlewares
-from services.yt_manager import (
+from services.youtube_manager import (
     get_my_videos, get_video_details, update_video,
     delete_video, set_thumbnail, get_my_playlists,
     add_to_playlist, create_playlist, upload_caption,
     get_captions, delete_caption, get_channel_stats,
     format_count
 )
-from utils.manager_keyboards import ManagerKeyboards
-from utils.manager_messages import ManagerMessages
+from utils.manage.keyboards import ManagerKeyboards
+from utils.manage.messages import ManagerMessages
 from utils.keyboards import Keyboards
 from utils.logger import log
 
