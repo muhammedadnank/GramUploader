@@ -5,6 +5,7 @@ Manual .srt caption upload is handled separately via /manage → Captions.
 """
 
 from pyrogram import Client, filters
+from pyrogram import enums
 from pyrogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from core.middlewares import apply_middlewares
 from services.ai_service import generate_metadata, regenerate_title
@@ -40,7 +41,7 @@ def register(app: Client):
                 [InlineKeyboardButton("✨ AI Metadata", callback_data="ai_metadata_start")],
                 [InlineKeyboardButton("« Back", callback_data="back_start")],
             ]),
-            parse_mode="HTML"
+            parse_mode=enums.ParseMode.HTML
         )
 
     # ─── AI METADATA ────────────────────────────────────────────
@@ -53,7 +54,7 @@ def register(app: Client):
             "Send a short description or topic of your video.\n\n"
             "<i>Example: 'Kerala road trip highlights 2026'</i>\n\n"
             "Send /cancel to abort.",
-            parse_mode="HTML"
+            parse_mode=enums.ParseMode.HTML
         )
 
     # ─── INLINE AI SUGGEST (from upload confirmation) ───────────
@@ -85,7 +86,7 @@ def register(app: Client):
                 f"📝 Desc: <i>{result['description'][:100]}...</i>\n"
                 f"🏷 Tags: <i>{', '.join(result['tags'][:4])}...</i>",
                 reply_markup=Keyboards.upload_confirm(pending_key, ai_applied=True),
-                parse_mode="HTML"
+                parse_mode=enums.ParseMode.HTML
             )
         except Exception as e:
             await cq.message.edit_text(f"❌ AI failed: {e}")
@@ -121,7 +122,7 @@ def register(app: Client):
                 reply_markup=InlineKeyboardMarkup([[
                     InlineKeyboardButton("🔗 View on YouTube ↗", url=f"https://youtube.com/watch?v={video_id}")
                 ]]),
-                parse_mode="HTML"
+                parse_mode=enums.ParseMode.HTML
             )
         except Exception as e:
             await cq.message.edit_text(f"❌ {e}")
@@ -145,7 +146,7 @@ def register(app: Client):
             await cq.message.edit_text(
                 Messages.upload_confirm(new_title, data["size"], data["privacy"]),
                 reply_markup=Keyboards.upload_confirm(pending_key),
-                parse_mode="HTML"
+                parse_mode=enums.ParseMode.HTML
             )
         except Exception as e:
             await cq.answer(f"❌ {e}", show_alert=True)
