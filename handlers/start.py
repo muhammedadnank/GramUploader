@@ -22,7 +22,7 @@ def register(app: Client):
             photo=Config.START_IMAGE_URL,
             caption=Messages.start_caption(mention=message.from_user.mention, connected=connected),
             reply_markup=Keyboards.start(message.from_user.id, connected),
-            parse_mode="html"
+            parse_mode="HTML"
         )
 
     @app.on_message(filters.command("connect") & filters.private)
@@ -31,9 +31,9 @@ def register(app: Client):
             return
         user = await user_repo.find(message.from_user.id)
         if user and user.youtube_connected:
-            await message.reply(Messages.already_connected(), reply_markup=Keyboards.reconnect(message.from_user.id), parse_mode="html")
+            await message.reply(Messages.already_connected(), reply_markup=Keyboards.reconnect(message.from_user.id), parse_mode="HTML")
         else:
-            await message.reply(Messages.connect_text(), reply_markup=Keyboards.connect(message.from_user.id), parse_mode="html")
+            await message.reply(Messages.connect_text(), reply_markup=Keyboards.connect(message.from_user.id), parse_mode="HTML")
 
     @app.on_message(filters.command("history") & filters.private)
     async def history(client: Client, message: Message):
@@ -49,7 +49,7 @@ def register(app: Client):
         used = await user_repo.get_uploads_today(message.from_user.id)
         plan = user.plan.value if user else "free"
         limit = Config.FREE_UPLOADS_PER_DAY if plan == "free" else "∞"
-        await message.reply(Messages.quota_text(used, limit, plan), reply_markup=Keyboards.back_to_start(), parse_mode="html")
+        await message.reply(Messages.quota_text(used, limit, plan), reply_markup=Keyboards.back_to_start(), parse_mode="HTML")
 
     @app.on_message(filters.command("settings") & filters.private)
     async def settings_cmd(client: Client, message: Message):
@@ -59,11 +59,11 @@ def register(app: Client):
 
     @app.on_callback_query(filters.regex("^help$"))
     async def cb_help(client, cq: CallbackQuery):
-        await cq.message.edit_text(Messages.help_text(), reply_markup=Keyboards.back_to_start(), parse_mode="html")
+        await cq.message.edit_text(Messages.help_text(), reply_markup=Keyboards.back_to_start(), parse_mode="HTML")
 
     @app.on_callback_query(filters.regex("^about$"))
     async def cb_about(client, cq: CallbackQuery):
-        await cq.message.edit_text(Messages.about_text(), reply_markup=Keyboards.back_to_start(), parse_mode="html")
+        await cq.message.edit_text(Messages.about_text(), reply_markup=Keyboards.back_to_start(), parse_mode="HTML")
 
     @app.on_callback_query(filters.regex("^quota$"))
     async def cb_quota(client, cq: CallbackQuery):
@@ -71,7 +71,7 @@ def register(app: Client):
         used = await user_repo.get_uploads_today(cq.from_user.id)
         plan = user.plan.value if user else "free"
         limit = Config.FREE_UPLOADS_PER_DAY if plan == "free" else "∞"
-        await cq.message.edit_text(Messages.quota_text(used, limit, plan), reply_markup=Keyboards.back_to_start(), parse_mode="html")
+        await cq.message.edit_text(Messages.quota_text(used, limit, plan), reply_markup=Keyboards.back_to_start(), parse_mode="HTML")
 
     @app.on_callback_query(filters.regex("^settings$"))
     async def cb_settings(client, cq: CallbackQuery):
@@ -81,7 +81,7 @@ def register(app: Client):
     async def cb_premium(client, cq: CallbackQuery):
         await cq.message.edit_text(
             "💎 <b>Premium Plan</b>\n\n✅ Unlimited uploads/day\n✅ Private & Unlisted\n✅ Priority queue\n✅ Custom descriptions\n\nTap below to upgrade!",
-            reply_markup=Keyboards.premium(), parse_mode="html"
+            reply_markup=Keyboards.premium(), parse_mode="HTML"
         )
 
     @app.on_callback_query(filters.regex(r"^history:(\d+)$"))
@@ -97,13 +97,13 @@ def register(app: Client):
             await cq.message.edit_caption(
                 caption=Messages.start_caption(mention=cq.from_user.mention, connected=connected),
                 reply_markup=Keyboards.start(cq.from_user.id, connected),
-                parse_mode="html"
+                parse_mode="HTML"
             )
         except Exception:
             await cq.message.edit_text(
                 Messages.start_caption(mention=cq.from_user.mention, connected=connected),
                 reply_markup=Keyboards.start(cq.from_user.id, connected),
-                parse_mode="html"
+                parse_mode="HTML"
             )
 
     @app.on_callback_query(filters.regex("^close$"))
@@ -155,7 +155,7 @@ def register(app: Client):
                     next_token=data.get("nextPageToken"),
                     prev_token=data.get("prevPageToken")
                 ),
-                parse_mode="html"
+                parse_mode="HTML"
             )
         except Exception as e:
             await msg.edit_text(f"❌ {e}")
@@ -168,7 +168,7 @@ def register(app: Client):
                 [InlineKeyboardButton("✨ AI Metadata", callback_data="ai_metadata_start")],
                 [InlineKeyboardButton("« Back", callback_data="back_start")],
             ]),
-            parse_mode="html"
+            parse_mode="HTML"
         )
 
 
@@ -187,9 +187,9 @@ async def _send_history(client, telegram_id, chat_id, page, edit_message=None):
         text = Messages.history_page(page_uploads, page, total_pages)
         kb = Keyboards.history(page, total_pages)
     if edit_message:
-        await edit_message.edit_text(text, reply_markup=kb, parse_mode="html")
+        await edit_message.edit_text(text, reply_markup=kb, parse_mode="HTML")
     else:
-        await client.send_message(chat_id, text, reply_markup=kb, parse_mode="html")
+        await client.send_message(chat_id, text, reply_markup=kb, parse_mode="HTML")
 
 
 async def _send_settings(client, telegram_id, chat_id, edit_message=None):
@@ -201,6 +201,6 @@ async def _send_settings(client, telegram_id, chat_id, edit_message=None):
     text = Messages.settings_text(privacy, lang, auto_title)
     kb = Keyboards.settings(privacy, lang, auto_title)
     if edit_message:
-        await edit_message.edit_text(text, reply_markup=kb, parse_mode="html")
+        await edit_message.edit_text(text, reply_markup=kb, parse_mode="HTML")
     else:
-        await client.send_message(chat_id, text, reply_markup=kb, parse_mode="html")
+        await client.send_message(chat_id, text, reply_markup=kb, parse_mode="HTML")
