@@ -123,12 +123,28 @@ async def generate_captions(
     language: ISO code e.g. "en", "ml", "hi" — None = auto-detect
     """
     try:
-        import whisper
+        try:
+            import whisper
+        except ImportError:
+            raise Exception("openai-whisper is not installed. Run: pip install openai-whisper")
 
         from config import Config
         model_name = Config.WHISPER_MODEL
 
         log.info(f"Loading Whisper model: {model_name}")
+
+        # RAM check — Whisper base needs ~500MB, small needs ~1GB
+        import psutil
+        available_mb = psutil.virtual_memory().available / (1024 * 1024)
+        required = {"tiny": 400, "base": 500, "small": 1100, "medium": 3000, "large": 6000}
+        needed = required.get(model_name, 500)
+        if available_mb < needed:
+            raise Exception(
+                f"Not enough RAM for Whisper '{model_name}' model. "
+                f"Need ~{needed}MB, available {available_mb:.0f}MB. "
+                f"Set WHISPER_MODEL=tiny in .env"
+            )
+
         model = await asyncio.to_thread(whisper.load_model, model_name)
 
         # Extract audio from video using ffmpeg
