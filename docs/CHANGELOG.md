@@ -5,6 +5,51 @@ Format: `[vX.Y.Z] — YYYY-MM-DD`
 
 ---
 
+## [v2.5.0] — 2026-03-14
+
+### Added
+
+- **`/user <id>`** — new admin command to inspect any user's details (name, username,
+  plan, ban status, YouTube connection, uploads today, total uploads) with inline
+  buttons to ban/unban and toggle plan directly from the message.
+- **`/deletekey <key>`** — deactivate a YouTube API key. `apikey_repo.deactivate()`
+  existed with no command to call it; now wired up.
+- **`/setpremium <id>` / `/setfree <id>`** — change a user's plan from command line.
+  `user_repo.set_plan()` existed with no command; now wired up.
+- **Inline user management callbacks** — `admin_ban_user`, `admin_unban_user`,
+  `admin_set_premium`, `admin_set_free` — ban/plan changes directly from `/user` panel
+  without typing commands.
+- **`Keyboards.admin_user()`** — inline keyboard with ban/unban and plan toggle buttons,
+  state-aware (shows correct button based on current ban/plan status).
+- **`Keyboards.admin_back()`** — back button that returns to admin stats panel instead
+  of `/start` menu.
+- **`Messages.admin_user_info()`** — formatted user detail message template.
+- **`apikey_repo.find_by_key(key)`** — lookup key by value for duplicate check.
+- **`upload_repo.count_by_user(telegram_id)`** — per-user total upload count.
+
+### Fixed
+
+- **Broadcast flood** — tight loop with no delay caused Telegram 429 errors for bots
+  with more than ~50 users. Added `asyncio.sleep(0.05)` between each send (~20 msg/sec)
+  and `FloodWait` catch with `asyncio.sleep(e.value)` + retry on the same user.
+- **`/ban` silent fail on new users** — `ban()` used `update_one` without `upsert=True`,
+  so banning a user who never started the bot had no effect (no document to update).
+  Fixed with `upsert=True`.
+- **`/addkey` duplicate keys** — adding the same API key twice created two active
+  documents, causing double quota counting. Now checks `find_by_key()` first.
+- **`admin_keys` / `admin_broadcast` callbacks back to wrong panel** — both used
+  `Keyboards.back_to_start()` which goes to `/start` menu. Changed to
+  `Keyboards.admin_back()` which returns to the admin stats panel.
+- **Maintenance toggle no feedback** — `cq.answer()` fired but the stats panel was not
+  refreshed, so the admin couldn't see the change took effect. Panel now refreshes after
+  toggle.
+- **Stats code duplication** — identical ~10-line DB call block was copy-pasted between
+  `/stats` command and `admin_stats` callback. Extracted into `_fetch_stats()` helper.
+- **`admin_panel` keyboard had no back button** — admin was stuck after `/stats` with
+  no way back to the main menu. Added `« Back` → `back_start`.
+
+---
+
 ## [v2.4.0] — 2026-03-14
 
 ### Removed
