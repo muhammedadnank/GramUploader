@@ -8,6 +8,9 @@ from core.filters import is_admin
 from utils.logger import log
 from config import Config
 
+# Store the broadcast source message per admin {admin_id: Message}
+_broadcast_msg: dict = {}
+
 
 def register(app: Client):
 
@@ -36,7 +39,7 @@ def register(app: Client):
             return
         key = parts[1].strip()
         await apikey_repo.add(key)
-        await message.reply(f"✅ API key added successfully.")
+        await message.reply("✅ API key added successfully.")
         log.info(f"Admin {message.from_user.id} added new API key")
 
     @app.on_message(filters.command("ban") & is_admin)
@@ -71,6 +74,8 @@ def register(app: Client):
         if not message.reply_to_message:
             await message.reply("Reply to a message to broadcast it.\nUsage: Reply + /broadcast")
             return
+        # Store the source message to forward later
+        _broadcast_msg[message.from_user.id] = message.reply_to_message
         count = await user_repo.count()
         await message.reply(
             Messages.broadcast_confirm(count),
@@ -80,15 +85,21 @@ def register(app: Client):
 
     @app.on_callback_query(filters.regex("^broadcast_confirm$") & is_admin)
     async def broadcast_do(client: Client, cq: CallbackQuery):
+        source_msg = _broadcast_msg.pop(cq.from_user.id, None)
+        if not source_msg:
+            await cq.message.edit_text("❌ No broadcast message found. Use /broadcast again.")
+            return
+
         await cq.message.edit_text("📢 Broadcasting... please wait.")
         user_ids = await user_repo.get_all_ids()
         success, failed = 0, 0
         for uid in user_ids:
             try:
-                await client.send_message(uid, "📢 Announcement from bot admin.")
+                await source_msg.forward(uid)
                 success += 1
             except Exception:
                 failed += 1
+
         await cq.message.edit_text(
             f"📢 <b>Broadcast Done</b>\n\n✅ Sent: {success}\n❌ Failed: {failed}",
             parse_mode="html"
@@ -96,6 +107,7 @@ def register(app: Client):
 
     @app.on_callback_query(filters.regex("^broadcast_cancel$") & is_admin)
     async def broadcast_cancel(client: Client, cq: CallbackQuery):
+        _broadcast_msg.pop(cq.from_user.id, None)
         await cq.message.edit_text("❌ Broadcast cancelled.")
 
     @app.on_callback_query(filters.regex("^admin_stats$") & is_admin)
@@ -113,6 +125,31 @@ def register(app: Client):
             reply_markup=Keyboards.admin_panel(),
             parse_mode="html"
         )
+
+    @app.on_callback_query(filters.regex("^admin_broadcast$") & is_admin)
+    async def cb_admin_broadcast(client: Client, cq: CallbackQuery):
+        await cq.message.edit_text(
+            "📢 <b>Broadcast</b>\n\n"
+            "Reply to any message with /broadcast to send it to all users.\n\n"
+            "<i>Go back and use the /broadcast command while replying to a message.</i>",
+            reply_markup=Keyboards.back_to_start(),
+            parse_mode="html"
+        )
+
+    @app.on_callback_query(filters.regex("^admin_keys$") & is_admin)
+    async def cb_admin_keys(client: Client, cq: CallbackQuery):
+        keys = await apikey_repo.list_all()
+        if not keys:
+            text = "🔑 <b>API Keys</b>\n\nNo keys added yet.\nUse /addkey <key> to add one."
+        else:
+            lines = []
+            for k in keys:
+                status = "✅" if k.get("active") else "❌"
+                used = k.get("units_used", 0)
+                short = k.get("key", "")[:12] + "..."
+                lines.append(f"{status} <code>{short}</code> — {used}/8000 units")
+            text = "🔑 <b>API Keys</b>\n\n" + "\n".join(lines)
+        await cq.message.edit_text(text, reply_markup=Keyboards.back_to_start(), parse_mode="html")
 
     @app.on_callback_query(filters.regex("^admin_maintenance_on$") & is_admin)
     async def cb_maintenance_on(client: Client, cq: CallbackQuery):
