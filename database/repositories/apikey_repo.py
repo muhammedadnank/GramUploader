@@ -23,6 +23,9 @@ class APIKeyRepository:
         await self.col.insert_one(api_key.model_dump())
 
     async def increment_usage(self, key_id: ObjectId, units: int):
+        # FIX: guard against None key_id (can happen if doc has no _id mapped)
+        if key_id is None:
+            return
         await self.col.update_one(
             {"_id": key_id},
             {"$inc": {"units_used": units}}
