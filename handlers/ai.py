@@ -1,24 +1,19 @@
 """
 AI Handler — /ai command
-- AI title + description + tags generation (Gemini)
-- AI caption generation (Whisper)
-- Inline "✨ AI Suggest" button in upload confirmation
-
-FSM text/video(document) handlers removed — moved to handlers/fsm_router.py
+Gemini-powered metadata generation (title, description, tags).
+Manual .srt caption upload is handled separately via /manage → Captions.
 """
 
 from pyrogram import Client, filters
 from pyrogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from core.middlewares import apply_middlewares
-from services.ai_service import generate_metadata, generate_captions, regenerate_title
-from services.youtube_manager import upload_caption
+from services.ai_service import generate_metadata, regenerate_title
 from utils.logger import log
 
-# FSM: pending AI jobs {user_id: {state, data}}
+# FSM state for metadata hint input
 _ai_states: dict = {}
 
-STATE_WAIT_HINT  = "wait_hint"
-STATE_WAIT_VIDEO = "wait_video_caption"
+STATE_WAIT_HINT = "wait_hint"
 
 
 def set_ai_state(uid: int, state: str, **kwargs):
@@ -43,7 +38,6 @@ def register(app: Client):
             "🤖 <b>AI Tools</b>\n\nWhat do you want to generate?",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("✨ AI Metadata", callback_data="ai_metadata_start")],
-                [InlineKeyboardButton("🎙 AI Captions (Whisper)", callback_data="ai_caption_start")],
                 [InlineKeyboardButton("« Back", callback_data="back_start")],
             ]),
             parse_mode="html"
@@ -58,20 +52,6 @@ def register(app: Client):
             "✨ <b>AI Metadata Generator</b>\n\n"
             "Send a short description or topic of your video.\n\n"
             "<i>Example: 'Kerala road trip highlights 2026'</i>\n\n"
-            "Send /cancel to abort.",
-            parse_mode="html"
-        )
-
-    # ─── AI CAPTION START ────────────────────────────────────────
-
-    @app.on_callback_query(filters.regex("^ai_caption_start$"))
-    async def cb_caption_start(client: Client, cq: CallbackQuery):
-        set_ai_state(cq.from_user.id, STATE_WAIT_VIDEO)
-        await cq.message.edit_text(
-            "🎙 <b>AI Caption Generator</b>\n\n"
-            "Send the video file you want to generate captions for.\n"
-            "Whisper will transcribe the audio automatically.\n\n"
-            "⚠️ Large files take a few minutes.\n\n"
             "Send /cancel to abort.",
             parse_mode="html"
         )
