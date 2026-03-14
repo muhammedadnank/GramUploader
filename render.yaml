@@ -1,0 +1,47 @@
+services:
+  - type: web
+    name: gramuploader
+    runtime: python
+    buildCommand: |
+      apt-get update && apt-get install -y ffmpeg
+      pip install -r requirements.txt
+    startCommand: python main.py
+    envVars:
+      - key: API_ID
+        sync: false
+      - key: API_HASH
+        sync: false
+      - key: BOT_TOKEN
+        sync: false
+      - key: ADMIN_IDS
+        sync: false
+      - key: MONGO_URI
+        sync: false
+      - key: DB_NAME
+        value: gramuploader
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_REDIRECT_URI
+        sync: false
+      - key: OAUTH_BASE_URL
+        sync: false
+      - key: FREE_UPLOADS_PER_DAY
+        value: "2"
+      - key: MAX_FILE_SIZE_MB
+        value: "2000"
+      - key: MAINTENANCE_MODE
+        value: "false"
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: WHISPER_MODEL
+        value: tiny
+      - key: START_IMAGE_URL
+        sync: false
+      - key: OWNER_URL
+        sync: false
+      - key: SUPPORT_URL
+        sync: false
+      - key: PREMIUM_URL
+        sync: false
