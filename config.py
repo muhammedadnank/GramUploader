@@ -16,12 +16,12 @@ class Config:
     GOOGLE_REDIRECT_URI = os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:8000/callback")
     OAUTH_BASE_URL = os.getenv("OAUTH_BASE_URL", "http://localhost:8000")
     OAUTH_SERVER_HOST = os.getenv("OAUTH_SERVER_HOST", "0.0.0.0")
-    OAUTH_SERVER_PORT = int(os.getenv("OAUTH_SERVER_PORT", 8000))
+    OAUTH_SERVER_PORT = int(os.getenv("PORT") or os.getenv("OAUTH_SERVER_PORT", 8080))  # Render injects $PORT
     FREE_UPLOADS_PER_DAY = int(os.getenv("FREE_UPLOADS_PER_DAY", 2))
     MAX_FILE_SIZE_MB = int(os.getenv("MAX_FILE_SIZE_MB", 2000))
     MAINTENANCE_MODE = os.getenv("MAINTENANCE_MODE", "false").lower() == "true"
     START_IMAGE_URL = os.getenv("START_IMAGE_URL", "https://i.imgur.com/placeholder.jpg")
-    OWNER_URL = os.getenv("OWNER_URL", "https://t.me/adnanxpkd")
+    OWNER_URL = os.getenv("OWNER_URL", "https://t.me/owner")
     SUPPORT_URL = os.getenv("SUPPORT_URL", "https://t.me/support")
     PREMIUM_URL = os.getenv("PREMIUM_URL", "https://t.me/support")
     # AI
