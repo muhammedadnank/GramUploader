@@ -36,6 +36,8 @@ GramUploader/
 ├── deploy.sh                      # Azure ACI one-click deploy script
 ├── render.yaml                    # Render deploy config
 ├── Procfile                       # Render / Railway process definition
+├── setup_local.sh                 # Local Linux setup script
+├── run.sh                         # Local quick-start script
 │
 ├── core/
 │   ├── bot.py                     # Pyrogram client singleton
@@ -81,6 +83,9 @@ GramUploader/
 ├── locales/
 │   ├── en.json                    # English strings
 │   └── ml.json                    # Malayalam strings
+│
+├── docs/
+│   └── CHANGELOG.md               # Full version history
 │
 └── tests/                         # (WIP)
 ```
@@ -145,6 +150,10 @@ START_IMAGE_URL=https://your-image-url.jpg
 OWNER_URL=https://t.me/yourusername
 SUPPORT_URL=https://t.me/yoursupport
 PREMIUM_URL=https://t.me/yoursupport
+
+# OAuth server (optional — defaults work for most deploys)
+OAUTH_SERVER_HOST=0.0.0.0
+OAUTH_SERVER_PORT=8080
 
 # AI
 GEMINI_API_KEY=your_gemini_api_key
@@ -401,49 +410,10 @@ refactor: move progress bar to formatters
 
 ---
 
+---
+
 ## Changelog
 
-### v2.1.0 — 2026-03-14
+See [docs/CHANGELOG.md](docs/CHANGELOG.md) for full version history.
 
-**Bug Fixes**
-- `handlers/start.py` — `cb_manage_open` and `cb_ai_menu` were accidentally outside `register()` (indentation bug); fixed
-- `services/youtube_uploader.py` — replaced non-existent old DB functions with correct `user_repo` / `apikey_repo` calls; token refresh now properly awaited
-- `services/oauth_server.py` — replaced non-existent `save_youtube_token` / `upsert_user` with `user_repo` calls; `refresh_token or ""` guard added
-
-**Structure**
-- `services/yt_manager.py` → `services/youtube_manager.py`
-- `utils/manager_keyboards.py` → `utils/manage/keyboards.py`
-- `utils/manager_messages.py` → `utils/manage/messages.py`
-- `handlers/video_handler.py` (old v1 file) deleted
-- All imports updated
-
-**Render Support**
-- `render.yaml` added — auto-detected on Render deploy
-- `Procfile` fixed — single `python main.py` command
-- `config.py` — reads `$PORT` env var (required by Render)
-- `Dockerfile` — added `ffmpeg`, `g++`, `python3-dev`, `/app/logs` dir
-- `services/ai_service.py` — RAM check before Whisper model load; lazy import with clear error
-- `requirements.txt` — added `psutil` for RAM check
-
-### v2.0.0 — 2026-03-13
-
-**YouTube Studio Panel**
-- `/manage` — full video management: edit, delete, thumbnail, captions, playlists, advanced settings, stats
-
-**AI Features**
-- `/ai` — Gemini 1.5 Flash metadata · Whisper captions
-- `✨ AI Suggest` + `🔄 Regen Title` on upload confirm screen
-
-**Other**
-- `fonts.py` — `sc()` Unicode small caps utility
-- New `/start` message design
-- Azure deploy: `Dockerfile` + `deploy.sh`
-- `.gitignore` added
-
-### v1.0.0 — 2026-02-01
-
-**Initial Release**
-- Telegram → YouTube upload with live progress
-- Upload confirmation, queue worker, Google OAuth2
-- MongoDB Atlas, free/premium plans, admin panel
-- History, quota, settings, English & Malayalam
+Latest: **v2.1.0** · [v2.0.0] · [v1.0.0]
