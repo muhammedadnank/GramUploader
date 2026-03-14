@@ -5,6 +5,7 @@ Manual .srt caption upload is handled separately via /manage → Captions.
 """
 
 from pyrogram import Client, filters
+from pyrogram.errors import MessageNotModified
 from pyrogram import enums
 from pyrogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from core.middlewares import apply_middlewares

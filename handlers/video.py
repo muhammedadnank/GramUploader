@@ -1,5 +1,6 @@
 import time
 from pyrogram import Client, filters
+from pyrogram.errors import MessageNotModified
 from pyrogram import enums
 from pyrogram.types import Message, CallbackQuery
 from database.db import user_repo, upload_repo
@@ -151,7 +152,10 @@ def register(app: Client):
     async def cb_upload_cancel(client: Client, cq: CallbackQuery):
         pending_key = cq.matches[0].group(1)
         _pending.pop(pending_key, None)
-        await cq.message.edit_text("❌ Upload cancelled.")
+        try:
+            await cq.message.edit_text("❌ Upload cancelled.")
+        except MessageNotModified:
+            pass
 
     @app.on_callback_query(filters.regex(r"^upload_privacy:(.+)$"))
     async def cb_upload_privacy(client: Client, cq: CallbackQuery):

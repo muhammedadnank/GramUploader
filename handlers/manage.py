@@ -7,6 +7,7 @@ to avoid Pyrogram handler conflicts.
 """
 
 from pyrogram import Client, filters
+from pyrogram.errors import MessageNotModified
 from pyrogram import enums
 from pyrogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from core.middlewares import apply_middlewares

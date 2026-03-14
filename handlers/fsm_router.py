@@ -18,6 +18,7 @@ Priority order (photo messages):
 """
 
 from pyrogram import Client, filters
+from pyrogram.errors import MessageNotModified
 from pyrogram import enums
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 from utils.logger import log

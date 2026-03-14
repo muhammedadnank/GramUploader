@@ -1,6 +1,7 @@
 import asyncio
 from collections import deque
 from pyrogram import Client
+from pyrogram.errors import MessageNotModified
 from pyrogram import enums
 from database.db import upload_repo
 from database.models import UploadStatus

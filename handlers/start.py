@@ -1,4 +1,5 @@
 from pyrogram import Client, filters
+from pyrogram.errors import MessageNotModified
 from pyrogram import enums
 from pyrogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from database.db import user_repo, upload_repo
@@ -29,11 +30,7 @@ def register(app: Client):
                 parse_mode=enums.ParseMode.HTML
             )
         except Exception:
-            await message.reply(
-                caption,
-                reply_markup=kb,
-                parse_mode=enums.ParseMode.HTML
-            )
+            await message.reply(caption, reply_markup=kb, parse_mode=enums.ParseMode.HTML)
 
     @app.on_message(filters.command("connect") & filters.private)
     async def connect(client: Client, message: Message):
