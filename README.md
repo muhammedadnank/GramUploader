@@ -274,7 +274,11 @@ Set all env vars in Railway dashboard → Variables.
 | `/stats` | Bot statistics + admin panel |
 | `/ban <id>` | Ban a user |
 | `/unban <id>` | Unban a user |
+| `/user <id>` | View user details, ban/unban, change plan |
 | `/addkey <key>` | Add YouTube API key |
+| `/deletekey <key>` | Deactivate a YouTube API key |
+| `/setpremium <id>` | Upgrade user to Premium |
+| `/setfree <id>` | Downgrade user to Free |
 | `/broadcast` | Broadcast to all users (reply to a message) |
 
 ---
@@ -381,4 +385,4 @@ refactor: move progress bar to formatters
 
 See [docs/CHANGELOG.md](docs/CHANGELOG.md) for full version history.
 
-Latest: **v2.4.0** · [v2.3.0] · [v2.2.0] · [v2.1.0] · [v2.0.0] · [v1.0.0]
+Latest: **v2.5.0** · [v2.4.0] · [v2.3.0] · [v2.2.0] · [v2.1.0] · [v2.0.0] · [v1.0.0]
