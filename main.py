@@ -4,21 +4,18 @@ from config import Config
 from core.bot import get_app, notify_admin
 from handlers import register_all
 from services.queue_worker import start_worker, enqueue
-from services.oauth_server import run_oauth_server
+from services.oauth_server import run_oauth_server, set_main_loop
 from utils.logger import log
 import threading
 
 
 async def recover_stuck_jobs():
-    """Re-enqueue any uploads stuck in PENDING/DOWNLOADING from a previous run."""
     from database.db import upload_repo
     stuck = await upload_repo.get_stuck_jobs()
     if not stuck:
         return
     log.warning(f"Recovering {len(stuck)} stuck upload(s) from previous session...")
     for doc in stuck:
-        # We don't have the original chat_id/message_id for download re-attempt,
-        # so mark them FAILED with a clear message so users know to retry.
         await upload_repo.update(doc["_id"], {
             "status": "failed",
             "error": "Bot restarted during upload. Please resend the video."
@@ -29,7 +26,9 @@ async def recover_stuck_jobs():
 async def main():
     app = get_app()
 
-    # Validate critical config
+    # Pass main event loop to OAuth server for DB calls
+    set_main_loop(asyncio.get_event_loop())
+
     if not Config.ADMIN_IDS:
         log.warning("⚠️  ADMIN_IDS is empty — no admin will have access to admin commands!")
     if not Config.BOT_TOKEN:
@@ -38,19 +37,15 @@ async def main():
     if not Config.GOOGLE_CLIENT_ID or not Config.GOOGLE_CLIENT_SECRET:
         log.warning("⚠️  GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET not set — OAuth will fail!")
 
-    # Register all handlers
     register_all(app)
 
     await app.start()
     log.info("Bot started successfully")
 
-    # Recover stuck jobs from previous crash
     await recover_stuck_jobs()
 
-    # Start queue worker
     asyncio.create_task(start_worker(app))
 
-    # Notify admins
     for admin_id in Config.ADMIN_IDS:
         try:
             await app.send_message(admin_id, "✅ Bot started successfully!")
@@ -61,10 +56,7 @@ async def main():
 
 
 if __name__ == "__main__":
-    # Start OAuth server in background thread
-    oauth_thread = threading.Thread(
-        target=run_oauth_server, daemon=True
-    )
+    oauth_thread = threading.Thread(target=run_oauth_server, daemon=True)
     oauth_thread.start()
     log.info(f"OAuth server starting on port {Config.OAUTH_SERVER_PORT}")
 
