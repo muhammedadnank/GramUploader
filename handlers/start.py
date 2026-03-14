@@ -256,7 +256,18 @@ async def _send_settings(client, telegram_id, chat_id, edit_message=None):
     privacy = settings.get("privacy", "public")
     lang = settings.get("lang", "en")
     auto_title = settings.get("auto_title", True)
-    text = Messages.settings_text(privacy, lang, auto_title)
+
+    # UPGRADE #7: fetch channel name if connected
+    channel_name = None
+    if user and user.youtube_connected:
+        try:
+            from services.youtube_manager import get_channel_stats
+            channel = await get_channel_stats(telegram_id)
+            channel_name = channel.get("snippet", {}).get("title")
+        except Exception:
+            pass
+
+    text = Messages.settings_text(privacy, lang, auto_title, channel_name=channel_name)
     kb = Keyboards.settings(privacy, lang, auto_title)
     if edit_message:
         try:
