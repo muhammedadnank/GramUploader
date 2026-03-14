@@ -82,11 +82,17 @@ def register(app: Client):
 
     @app.on_callback_query(filters.regex("^help$"))
     async def cb_help(client, cq: CallbackQuery):
-        await cq.message.edit_text(Messages.help_text(), reply_markup=Keyboards.back_to_start(), parse_mode=enums.ParseMode.HTML)
+        try:
+            await cq.message.edit_text(Messages.help_text(), reply_markup=Keyboards.back_to_start(), parse_mode=enums.ParseMode.HTML)
+        except MessageNotModified:
+            pass
 
     @app.on_callback_query(filters.regex("^about$"))
     async def cb_about(client, cq: CallbackQuery):
-        await cq.message.edit_text(Messages.about_text(), reply_markup=Keyboards.back_to_start(), parse_mode=enums.ParseMode.HTML)
+        try:
+            await cq.message.edit_text(Messages.about_text(), reply_markup=Keyboards.back_to_start(), parse_mode=enums.ParseMode.HTML)
+        except MessageNotModified:
+            pass
 
     @app.on_callback_query(filters.regex("^quota$"))
     async def cb_quota(client, cq: CallbackQuery):
@@ -94,7 +100,10 @@ def register(app: Client):
         used = await user_repo.get_uploads_today(cq.from_user.id)
         plan = user.plan.value if user else "free"
         limit = Config.FREE_UPLOADS_PER_DAY if plan == "free" else "∞"
-        await cq.message.edit_text(Messages.quota_text(used, limit, plan), reply_markup=Keyboards.back_to_start(), parse_mode=enums.ParseMode.HTML)
+        try:
+            await cq.message.edit_text(Messages.quota_text(used, limit, plan), reply_markup=Keyboards.back_to_start(), parse_mode=enums.ParseMode.HTML)
+        except MessageNotModified:
+            pass
 
     @app.on_callback_query(filters.regex("^settings$"))
     async def cb_settings(client, cq: CallbackQuery):
@@ -199,7 +208,10 @@ async def _send_history(client, telegram_id, chat_id, page, edit_message=None):
         text = Messages.history_page(page_uploads, page, total_pages)
         kb = Keyboards.history(page, total_pages)
     if edit_message:
-        await edit_message.edit_text(text, reply_markup=kb, parse_mode=enums.ParseMode.HTML)
+        try:
+            await edit_message.edit_text(text, reply_markup=kb, parse_mode=enums.ParseMode.HTML)
+        except MessageNotModified:
+            pass
     else:
         await client.send_message(chat_id, text, reply_markup=kb, parse_mode=enums.ParseMode.HTML)
 
@@ -213,6 +225,9 @@ async def _send_settings(client, telegram_id, chat_id, edit_message=None):
     text = Messages.settings_text(privacy, lang, auto_title)
     kb = Keyboards.settings(privacy, lang, auto_title)
     if edit_message:
-        await edit_message.edit_text(text, reply_markup=kb, parse_mode=enums.ParseMode.HTML)
+        try:
+            await edit_message.edit_text(text, reply_markup=kb, parse_mode=enums.ParseMode.HTML)
+        except MessageNotModified:
+            pass
     else:
         await client.send_message(chat_id, text, reply_markup=kb, parse_mode=enums.ParseMode.HTML)

@@ -158,10 +158,13 @@ def register(app: Client):
             "privacy": data["privacy"],
         })
 
-        await cq.message.edit_text(
-            Messages.upload_queued(data["title"], data["size"], position),
-            parse_mode=enums.ParseMode.HTML
-        )
+        try:
+            await cq.message.edit_text(
+                Messages.upload_queued(data["title"], data["size"], position),
+                parse_mode=enums.ParseMode.HTML
+            )
+        except MessageNotModified:
+            pass
 
     @app.on_callback_query(filters.regex(r"^upload_cancel:(.+)$"))
     async def cb_upload_cancel(client: Client, cq: CallbackQuery):
@@ -191,12 +194,15 @@ def register(app: Client):
             return
         _pending[pending_key]["privacy"] = privacy
         data = _pending[pending_key]
-        await cq.message.edit_text(
-            Messages.upload_confirm(data["title"], data["size"], privacy,
-                                    file_type=data.get("file_type", "")),
-            reply_markup=Keyboards.upload_confirm(pending_key),
-            parse_mode=enums.ParseMode.HTML
-        )
+        try:
+            await cq.message.edit_text(
+                Messages.upload_confirm(data["title"], data["size"], privacy,
+                                        file_type=data.get("file_type", "")),
+                reply_markup=Keyboards.upload_confirm(pending_key),
+                parse_mode=enums.ParseMode.HTML
+            )
+        except MessageNotModified:
+            pass
         await cq.answer(f"Privacy set to {privacy}")
 
     @app.on_callback_query(filters.regex(r"^upload_back:(.+)$"))
@@ -206,12 +212,15 @@ def register(app: Client):
         if not data:
             await cq.answer("Session expired.", show_alert=True)
             return
-        await cq.message.edit_text(
-            Messages.upload_confirm(data["title"], data["size"], data["privacy"],
-                                    file_type=data.get("file_type", "")),
-            reply_markup=Keyboards.upload_confirm(pending_key),
-            parse_mode=enums.ParseMode.HTML
-        )
+        try:
+            await cq.message.edit_text(
+                Messages.upload_confirm(data["title"], data["size"], data["privacy"],
+                                        file_type=data.get("file_type", "")),
+                reply_markup=Keyboards.upload_confirm(pending_key),
+                parse_mode=enums.ParseMode.HTML
+            )
+        except MessageNotModified:
+            pass
 
     @app.on_callback_query(filters.regex(r"^upload_edit_title:(.+)$"))
     async def cb_upload_edit_title(client: Client, cq: CallbackQuery):
@@ -221,10 +230,13 @@ def register(app: Client):
             return
         current_title = _pending[pending_key]["title"]
         _pending_edit[cq.from_user.id] = pending_key
-        await cq.message.edit_text(
-            f"✏️ <b>Edit Title</b>\n\n"
-            f"Current: <code>{current_title[:80]}</code>\n\n"
-            f"Send the new title as a message.\n"
-            f"Send /cancel to abort.",
-            parse_mode=enums.ParseMode.HTML
-        )
+        try:
+            await cq.message.edit_text(
+                f"✏️ <b>Edit Title</b>\n\n"
+                f"Current: <code>{current_title[:80]}</code>\n\n"
+                f"Send the new title as a message.\n"
+                f"Send /cancel to abort.",
+                parse_mode=enums.ParseMode.HTML
+            )
+        except MessageNotModified:
+            pass

@@ -9,6 +9,22 @@ to avoid Pyrogram handler conflicts.
 from pyrogram import Client, filters
 from pyrogram.errors import MessageNotModified
 from pyrogram import enums
+
+
+async def _safe_edit(message, text=None, reply_markup=None, parse_mode=None):
+    """Edit message ignoring MessageNotModified."""
+    try:
+        kwargs = {}
+        if reply_markup is not None:
+            kwargs["reply_markup"] = reply_markup
+        if parse_mode is not None:
+            kwargs["parse_mode"] = parse_mode
+        if text is not None:
+            await message.edit_text(text, **kwargs)
+        else:
+            await message.edit_reply_markup(reply_markup=reply_markup)
+    except MessageNotModified:
+        pass
 from pyrogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from core.middlewares import apply_middlewares
 from services.youtube_manager import (
@@ -348,7 +364,7 @@ def register(app: Client):
         await update_video(cq.from_user.id, video_id, {"madeForKids": not current})
         await cq.answer(f"Made for Kids: {'ON' if not current else 'OFF'}")
         video = await get_video_details(cq.from_user.id, video_id)
-        await cq.message.edit_reply_markup(ManagerKeyboards.advanced(video_id, video["status"]))
+        await _safe_edit(cq.message, reply_markup=ManagerKeyboards.advanced(video_id, video["status"]))
 
     @app.on_callback_query(filters.regex(r"^mgr_toggle_embed:(.+)$"))
     async def cb_toggle_embed(client: Client, cq: CallbackQuery):
@@ -358,7 +374,7 @@ def register(app: Client):
         await update_video(cq.from_user.id, video_id, {"embeddable": not current})
         await cq.answer(f"Embeddable: {'ON' if not current else 'OFF'}")
         video = await get_video_details(cq.from_user.id, video_id)
-        await cq.message.edit_reply_markup(ManagerKeyboards.advanced(video_id, video["status"]))
+        await _safe_edit(cq.message, reply_markup=ManagerKeyboards.advanced(video_id, video["status"]))
 
     @app.on_callback_query(filters.regex(r"^mgr_toggle_license:(.+)$"))
     async def cb_toggle_license(client: Client, cq: CallbackQuery):
@@ -369,7 +385,7 @@ def register(app: Client):
         await update_video(cq.from_user.id, video_id, {"license": new_lic})
         await cq.answer(f"License: {'CC' if new_lic == 'creativeCommon' else 'Standard'}")
         video = await get_video_details(cq.from_user.id, video_id)
-        await cq.message.edit_reply_markup(ManagerKeyboards.advanced(video_id, video["status"]))
+        await _safe_edit(cq.message, reply_markup=ManagerKeyboards.advanced(video_id, video["status"]))
 
     @app.on_callback_query(filters.regex(r"^mgr_schedule:(.+)$"))
     async def cb_schedule(client: Client, cq: CallbackQuery):

@@ -77,7 +77,7 @@ async def upload_to_youtube(
             "snippet": {
                 "title": title[:100],
                 "description": description or "Uploaded via GramUploader",
-                "tags": tags or ["telegram", "gramuploader"],
+                "tags": tags if tags is not None else ["telegram", "gramuploader"],
                 "categoryId": category_id,
             },
             "status": {

@@ -85,8 +85,12 @@ async def callback(request: Request):
             await user_repo.upsert(telegram_id, {"youtube_connected": True})
 
         if _main_loop and _main_loop.is_running():
+            # Schedule DB save on the main loop — run in executor so we don't
+            # block the FastAPI/uvicorn event loop waiting for the result
             future = asyncio.run_coroutine_threadsafe(_save(), _main_loop)
-            future.result(timeout=10)
+            await asyncio.get_event_loop().run_in_executor(
+                None, lambda: future.result(timeout=10)
+            )
         else:
             await _save()
 

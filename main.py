@@ -3,7 +3,7 @@ from pyrogram import Client
 from config import Config
 from core.bot import get_app, notify_admin
 from handlers import register_all
-from services.queue_worker import start_worker, enqueue
+from services.queue_worker import start_worker
 from services.oauth_server import run_oauth_server, set_main_loop
 from utils.logger import log
 import threading
@@ -11,13 +11,14 @@ import threading
 
 async def recover_stuck_jobs():
     from database.db import upload_repo
+    from database.models import UploadStatus
     stuck = await upload_repo.get_stuck_jobs()
     if not stuck:
         return
     log.warning(f"Recovering {len(stuck)} stuck upload(s) from previous session...")
     for doc in stuck:
         await upload_repo.update(doc["_id"], {
-            "status": "failed",
+            "status": UploadStatus.FAILED.value,
             "error": "Bot restarted during upload. Please resend the video."
         })
     log.info(f"Marked {len(stuck)} stuck job(s) as failed.")
@@ -27,7 +28,7 @@ async def main():
     app = get_app()
 
     # Pass main event loop to OAuth server for DB calls
-    set_main_loop(asyncio.get_event_loop())
+    set_main_loop(asyncio.get_running_loop())
 
     if not Config.ADMIN_IDS:
         log.warning("⚠️  ADMIN_IDS is empty — no admin will have access to admin commands!")

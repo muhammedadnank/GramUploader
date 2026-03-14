@@ -17,7 +17,8 @@ async def _build_youtube(telegram_id: int):
     creds = await get_credentials(telegram_id)
     if not creds:
         raise Exception("YouTube not connected. Use /connect first.")
-    return build("youtube", "v3", credentials=creds)
+    # build() reads discovery doc cache from disk — wrap to avoid blocking event loop
+    return await asyncio.to_thread(lambda: build("youtube", "v3", credentials=creds))
 
 
 # ─── VIDEO LIST ─────────────────────────────────────────────────
@@ -160,7 +161,10 @@ async def set_thumbnail(telegram_id: int, video_id: str, image_path: str):
     """Set custom thumbnail for a video"""
     try:
         yt = await _build_youtube(telegram_id)
-        media = MediaFileUpload(image_path, mimetype="image/jpeg", resumable=True)
+        ext = image_path.rsplit(".", 1)[-1].lower() if "." in image_path else "jpg"
+        mime = {"jpg": "image/jpeg", "jpeg": "image/jpeg",
+                "png": "image/png", "webp": "image/webp"}.get(ext, "image/jpeg")
+        media = MediaFileUpload(image_path, mimetype=mime, resumable=True)
         await asyncio.to_thread(
             lambda: yt.thumbnails().set(videoId=video_id, media_body=media).execute()
         )
