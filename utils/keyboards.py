@@ -32,7 +32,6 @@ class Keyboards:
             ],
             [
                 InlineKeyboardButton("🎬 Manage Videos", callback_data="mgr_open"),
-                InlineKeyboardButton("🤖 AI Tools", callback_data="ai_menu"),
             ],
             [
                 InlineKeyboardButton("⚙️ Settings", callback_data="settings"),
@@ -79,8 +78,7 @@ class Keyboards:
     # ─── UPLOAD CONFIRM ─────────────────────────────────────────
 
     @staticmethod
-    def upload_confirm(upload_id: str, ai_applied: bool = False) -> InlineKeyboardMarkup:
-        ai_btn_label = "✨ AI Applied ✓" if ai_applied else "✨ AI Suggest"
+    def upload_confirm(upload_id: str) -> InlineKeyboardMarkup:
         return InlineKeyboardMarkup([
             [
                 InlineKeyboardButton("✅ Upload Now", callback_data=f"upload_confirm:{upload_id}"),
@@ -90,10 +88,6 @@ class Keyboards:
                 InlineKeyboardButton("✏️ Edit Title", callback_data=f"upload_edit_title:{upload_id}"),
                 InlineKeyboardButton("🔒 Privacy", callback_data=f"upload_privacy:{upload_id}"),
             ],
-            [
-                InlineKeyboardButton(ai_btn_label, callback_data=f"ai_suggest:{upload_id}"),
-                InlineKeyboardButton("🔄 Regen Title", callback_data=f"ai_regen_title:{upload_id}"),
-            ]
         ])
 
     @staticmethod

@@ -19,6 +19,3 @@ uvicorn[standard]
 python-dotenv
 pydantic
 psutil
-
-# AI â€” metadata
-google-generativeai

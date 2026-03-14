@@ -24,5 +24,3 @@ class Config:
     OWNER_URL = os.getenv("OWNER_URL", "https://t.me/owner")
     SUPPORT_URL = os.getenv("SUPPORT_URL", "https://t.me/support")
     PREMIUM_URL = os.getenv("PREMIUM_URL", "https://t.me/support")
-    # AI
-    GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")

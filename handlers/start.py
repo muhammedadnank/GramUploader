@@ -167,17 +167,6 @@ def register(app: Client):
         except Exception as e:
             await msg.edit_text(f"❌ {e}")
 
-    @app.on_callback_query(filters.regex("^ai_menu$"))
-    async def cb_ai_menu(client, cq: CallbackQuery):
-        await cq.message.edit_text(
-            "🤖 <b>AI Tools</b>\n\nWhat do you want to generate?",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("✨ AI Metadata", callback_data="ai_metadata_start")],
-                [InlineKeyboardButton("« Back", callback_data="back_start")],
-            ]),
-            parse_mode=enums.ParseMode.HTML
-        )
-
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 

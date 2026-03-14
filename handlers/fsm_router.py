@@ -55,35 +55,6 @@ def register(app: Client):
                 await message.reply("⚠️ Session expired. Please resend the video.")
             return
 
-        # ── 2. AI FSM (metadata hint) ───────────────────────────────────────
-        from handlers.ai import get_ai_state, clear_ai_state, STATE_WAIT_HINT
-        ai_state = get_ai_state(user_id)
-        if ai_state and ai_state.get("state") == STATE_WAIT_HINT:
-            if text == "/cancel":
-                clear_ai_state(user_id)
-                await message.reply("❌ Cancelled.")
-                return
-            clear_ai_state(user_id)
-            msg = await message.reply("🤖 Generating metadata with Gemini...")
-            try:
-                from services.ai_service import generate_metadata
-                result = await generate_metadata(title_hint=text)
-                tags_str = "\n".join(f"  • {t}" for t in result["tags"])
-                await msg.edit_text(
-                    f"✨ <b>AI Metadata</b>\n\n"
-                    f"📌 <b>Title:</b>\n<code>{result['title']}</code>\n\n"
-                    f"📝 <b>Description:</b>\n<i>{result['description']}</i>\n\n"
-                    f"🏷 <b>Tags:</b>\n{tags_str}",
-                    reply_markup=InlineKeyboardMarkup([
-                        [InlineKeyboardButton("🔄 Regenerate", callback_data="ai_metadata_start")],
-                        [InlineKeyboardButton("« Back", callback_data="back_start")],
-                    ]),
-                    parse_mode=enums.ParseMode.HTML
-                )
-            except Exception as e:
-                await msg.edit_text(f"❌ {e}")
-            return
-
         # ── 3. Manage FSM ───────────────────────────────────────────────────
         from handlers.manage import get_state, clear_state, set_state
         from handlers.manage import (

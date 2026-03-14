@@ -1,12 +1,11 @@
 from pyrogram import Client
-from handlers import manage, ai, start, video, admin, fsm_router
+from handlers import manage, start, video, admin, fsm_router
 from utils.logger import log
 
 
 def register_all(app: Client):
     # Register callback-only handlers first
     manage.register(app)
-    ai.register(app)
     start.register(app)
     video.register(app)
     admin.register(app)
