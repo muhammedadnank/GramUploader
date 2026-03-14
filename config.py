@@ -26,4 +26,3 @@ class Config:
     PREMIUM_URL = os.getenv("PREMIUM_URL", "https://t.me/support")
     # AI
     GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-    WHISPER_MODEL = os.getenv("WHISPER_MODEL", "base")  # tiny/base/small/medium/large
