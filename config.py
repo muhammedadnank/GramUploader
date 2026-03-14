@@ -21,7 +21,7 @@ class Config:
     MAX_FILE_SIZE_MB = int(os.getenv("MAX_FILE_SIZE_MB", 2000))
     MAINTENANCE_MODE = os.getenv("MAINTENANCE_MODE", "false").lower() == "true"
     START_IMAGE_URL = os.getenv("START_IMAGE_URL", "https://i.imgur.com/placeholder.jpg")
-    OWNER_URL = os.getenv("OWNER_URL", "https://t.me/owner")
+    OWNER_URL = os.getenv("OWNER_URL", "https://t.me/adnanxpkd")
     SUPPORT_URL = os.getenv("SUPPORT_URL", "https://t.me/support")
     PREMIUM_URL = os.getenv("PREMIUM_URL", "https://t.me/support")
     # AI
