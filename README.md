@@ -7,7 +7,7 @@ Upload Telegram videos directly to YouTube — with AI metadata, YouTube Studio-
 - **Upload** videos from Telegram to YouTube with live progress
 - **Manage** existing YouTube videos (edit, delete, thumbnail, captions, playlists)
 - **AI Tools** — title, description & tags via Gemini · captions via Whisper
-- **Confirmation screen** before upload — set title, privacy, cancel
+- **Confirmation screen** before upload — set title, edit title inline, privacy, cancel
 - **Queue system** — multiple uploads handled sequentially
 - **Free / Premium** plan support with daily upload limits
 - **Admin panel** — stats, broadcast, ban, API key management
@@ -30,7 +30,7 @@ Upload Telegram videos directly to YouTube — with AI metadata, YouTube Studio-
 
 ```
 GramUploader/
-├── main.py                        # Entry point
+├── main.py                        # Entry point + startup validation + stuck-job recovery
 ├── config.py                      # All env config
 ├── Dockerfile                     # Docker / Azure ACI deploy
 ├── deploy.sh                      # Azure ACI one-click deploy script
@@ -49,13 +49,14 @@ GramUploader/
 │   ├── models.py                  # Pydantic models (User, Upload, APIKey)
 │   └── repositories/
 │       ├── user_repo.py           # User CRUD
-│       ├── upload_repo.py         # Upload CRUD
+│       ├── upload_repo.py         # Upload CRUD + stuck-job query
 │       └── apikey_repo.py         # API key rotation
 │
 ├── handlers/
-│   ├── __init__.py                # register_all() — order: manage > ai > start > video > admin
-│   ├── manage.py                  # /manage — YouTube Studio panel
-│   ├── ai.py                      # /ai — Gemini metadata + Whisper captions
+│   ├── __init__.py                # register_all() — callbacks first, fsm_router last
+│   ├── fsm_router.py              # Central FSM: sole text/photo/document handler
+│   ├── manage.py                  # /manage — YouTube Studio panel (callbacks only)
+│   ├── ai.py                      # /ai — Gemini metadata + Whisper (callbacks only)
 │   ├── start.py                   # /start /connect /history /quota /settings
 │   ├── video.py                   # Video upload handler + confirmation flow
 │   └── admin.py                   # /stats /ban /broadcast /addkey
@@ -84,10 +85,8 @@ GramUploader/
 │   ├── en.json                    # English strings
 │   └── ml.json                    # Malayalam strings
 │
-├── docs/
-│   └── CHANGELOG.md               # Full version history
-│
-└── tests/                         # (WIP)
+└── docs/
+    └── CHANGELOG.md               # Full version history
 ```
 
 ---
@@ -298,7 +297,7 @@ Set all env vars in Railway dashboard → Variables.
 | `/history` | Recent upload history (paginated) |
 | `/quota` | Today's upload usage |
 | `/settings` | Preferences: privacy, language, auto-title |
-| `/cancel` | Cancel active FSM input |
+| `/cancel` | Cancel active FSM input (works anywhere) |
 
 ### Admin Commands
 
@@ -320,7 +319,8 @@ Set all env vars in Railway dashboard → Variables.
         └── Send video
               └── Confirmation screen
                     ├── ✨ AI Suggest → Gemini generates title/desc/tags
-                    ├── ✏️ Edit Title / 🔒 Privacy
+                    ├── ✏️ Edit Title → send new title as message
+                    ├── 🔒 Privacy → Public / Private / Unlisted
                     └── Upload Now → Queue → Download → Upload → YouTube link
 ```
 
@@ -360,13 +360,38 @@ Set all env vars in Railway dashboard → Variables.
 
 ---
 
+## Architecture Note — FSM Routing
+
+Pyrogram fires the **first** matching handler and ignores all subsequent ones. This means multiple
+handlers registered for the same filter (e.g. `filters.text & filters.private`) will conflict.
+
+GramUploader solves this with a dedicated `handlers/fsm_router.py` which is registered **last** and
+acts as the sole handler for text, photo, and document messages. It routes based on per-user state:
+
+```
+Text message received
+  ├── user in _pending_edit?     → upload title edit
+  ├── AI state == WAIT_HINT?     → Gemini metadata generation
+  └── manage state active?       → edit title / desc / tags / schedule / playlist / caption lang
+
+Document received
+  ├── AI state == WAIT_VIDEO?    → Whisper transcription
+  ├── manage state == CAPTION_FILE? → .srt caption upload
+  └── (no state)                 → normal video upload flow
+```
+
+All command handlers (`/start`, `/manage`, `/ai`, etc.) and callback query handlers are registered
+before `fsm_router`, so they always take priority.
+
+---
+
 ## Known Limitations
 
 - YouTube Data API free quota: ~6 uploads/day per key (add more keys via `/addkey`)
 - Telegram MTProto file size: up to 2GB (4GB with Telegram Premium)
 - Cards, End Screens, Audio replacement — not available via YouTube Data API
 - OAuth token auto-refreshed on next use
-- In-memory queue — bot restart clears pending uploads (use Redis for production)
+- In-memory queue — bot restart marks pending uploads as failed (use Redis for production)
 - Whisper AI captions: max recommended 500MB video for reasonable speed
 - Whisper requires ~400–3000MB RAM depending on model — use `tiny` on free cloud tiers
 - Render free tier: bot sleeps after 15 min inactivity, first wake-up is slow
@@ -396,6 +421,7 @@ Branch naming: `feature/` · `fix/` · `docs/` · `refactor/`
 - All DB access via repository pattern — no direct collection calls in handlers
 - New message templates → `utils/messages.py` only
 - New keyboards → `utils/keyboards.py` or `utils/manage/keyboards.py`
+- FSM state → `handlers/fsm_router.py` only; never register `filters.text` in other handlers
 - Use `log.info()` / `log.error()` — no bare `print()`
 - Never commit `.env` or `*.session` files
 
@@ -410,10 +436,8 @@ refactor: move progress bar to formatters
 
 ---
 
----
-
 ## Changelog
 
 See [docs/CHANGELOG.md](docs/CHANGELOG.md) for full version history.
 
-Latest: **v2.1.0** · [v2.0.0] · [v1.0.0]
+Latest: **v2.2.0** · [v2.1.0] · [v2.0.0] · [v1.0.0]
