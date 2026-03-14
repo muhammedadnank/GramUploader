@@ -23,7 +23,7 @@ Upload Telegram videos directly to YouTube — with AI metadata, YouTube Studio-
 | AI Captions | OpenAI Whisper (local) |
 | Database | MongoDB Atlas (Motor async) |
 | OAuth2 Server | FastAPI + Uvicorn |
-| Deploy | Azure Container Instances |
+| Deploy | Azure ACI · Render · Railway |
 | Language | Python 3.11+ |
 
 ## Project Structure
@@ -32,9 +32,10 @@ Upload Telegram videos directly to YouTube — with AI metadata, YouTube Studio-
 GramUploader/
 ├── main.py                        # Entry point
 ├── config.py                      # All env config
-├── Dockerfile                     # Azure / Docker deploy
-├── deploy.sh                      # Azure ACI deploy script
-├── Procfile                       # Railway deploy (alternative)
+├── Dockerfile                     # Docker / Azure ACI deploy
+├── deploy.sh                      # Azure ACI one-click deploy script
+├── render.yaml                    # Render deploy config
+├── Procfile                       # Render / Railway process definition
 │
 ├── core/
 │   ├── bot.py                     # Pyrogram client singleton
@@ -50,7 +51,7 @@ GramUploader/
 │       └── apikey_repo.py         # API key rotation
 │
 ├── handlers/
-│   ├── __init__.py                # register_all() — order matters (manage > ai > start > video > admin)
+│   ├── __init__.py                # register_all() — order: manage > ai > start > video > admin
 │   ├── manage.py                  # /manage — YouTube Studio panel
 │   ├── ai.py                      # /ai — Gemini metadata + Whisper captions
 │   ├── start.py                   # /start /connect /history /quota /settings
@@ -68,6 +69,7 @@ GramUploader/
 │   ├── messages.py                # All bot message templates
 │   ├── keyboards.py               # All inline keyboard layouts
 │   ├── manage/
+│   │   ├── __init__.py
 │   │   ├── keyboards.py           # /manage panel keyboards
 │   │   └── messages.py            # /manage panel messages
 │   ├── fonts.py                   # Unicode small caps sc() utility
@@ -106,8 +108,7 @@ GramUploader/
 
 ### 4. Gemini API Key (AI features)
 
-- Visit https://aistudio.google.com
-- Create API key → free tier available
+- Visit https://aistudio.google.com → Create API key (free tier available)
 - Set as `GEMINI_API_KEY`
 
 ### 5. Environment Variables
@@ -147,7 +148,7 @@ PREMIUM_URL=https://t.me/yoursupport
 
 # AI
 GEMINI_API_KEY=your_gemini_api_key
-WHISPER_MODEL=base
+WHISPER_MODEL=tiny          # tiny recommended for cloud free tiers (low RAM)
 ```
 
 ### 6. Install & Run Locally
@@ -159,26 +160,27 @@ python main.py
 
 ---
 
-## Deploy on Azure (Recommended)
+## Deploy Options
 
-> Requires Azure CLI and an active Azure subscription.
-> Azure for Students $100 credit — estimated ~$3.67/month.
+### Option 1 — Azure Container Instances (Recommended for Students)
 
-### 1. Install Azure CLI (Linux)
+> Azure for Students: $100 free credit → ~27 months at ~$3.67/month.
+
+**1. Install Azure CLI**
 
 ```bash
 curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
 az login
 ```
 
-### 2. Edit deploy.sh
+**2. Edit `deploy.sh`**
 
 ```bash
 REGISTRY_NAME="youruniquename"   # globally unique, lowercase, no hyphens
-DNS_LABEL="gramuploader-oauth"   # subdomain for OAuth callback
+DNS_LABEL="gramuploader-oauth"   # subdomain for OAuth callback URL
 ```
 
-### 3. Run Deploy Script
+**3. Run**
 
 ```bash
 chmod +x deploy.sh
@@ -192,42 +194,73 @@ The script will:
 4. Deploy container with all env vars
 5. Print management commands
 
-### 4. Useful Commands
+**Useful commands**
 
 ```bash
-# Live logs
 az container logs -g bots-rg -n gramuploader --follow
-
-# Status
 az container show -g bots-rg -n gramuploader --query instanceView.state
-
-# Restart
 az container restart -g bots-rg -n gramuploader
-
-# Delete
 az container delete -g bots-rg -n gramuploader --yes
 ```
 
-### Cost Estimate
+**Cost**
 
 | Resource | Spec | Monthly |
 |---|---|---|
 | GramUploader | 0.5 vCPU, 512MB RAM | ~$3.50 |
-| MongoDB Atlas | Free tier (512MB) | $0.00 |
+| MongoDB Atlas | Free tier | $0.00 |
 | Container Registry | Basic SKU | ~$0.17 |
 | **Total** | | **~$3.67/month** |
 
-$100 credit → ~**27 months**
+---
+
+### Option 2 — Render
+
+> Free tier available. `render.yaml` included — auto-detected on deploy.
+
+**1. Push repo to GitHub**
+
+**2. Connect on Render**
+
+- Go to https://render.com → New → Web Service
+- Connect GitHub repo → Render auto-detects `render.yaml`
+
+**3. Set Environment Variables**
+
+In Render dashboard → Environment, fill these values:
+
+```
+API_ID, API_HASH, BOT_TOKEN, ADMIN_IDS
+MONGO_URI
+GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET
+GOOGLE_REDIRECT_URI = https://gramuploader.onrender.com/callback
+OAUTH_BASE_URL      = https://gramuploader.onrender.com
+GEMINI_API_KEY
+START_IMAGE_URL, OWNER_URL, SUPPORT_URL, PREMIUM_URL
+```
+
+**4. Update Google Console**
+
+Add `https://gramuploader.onrender.com/callback` to Authorized redirect URIs.
+
+**5. Deploy**
+
+Render will run `buildCommand` from `render.yaml` (installs `ffmpeg` + Python deps) then start `python main.py`.
+
+> ⚠️ **Render free tier has 512MB RAM.** Set `WHISPER_MODEL=tiny` to avoid out-of-memory errors.
+> The bot will sleep after 15 minutes of inactivity on free tier — first message after sleep may be slow.
 
 ---
 
-## Deploy on Railway (Alternative)
+### Option 3 — Railway
 
 ```bash
 railway login
 railway init
 railway up
 ```
+
+Set all env vars in Railway dashboard → Variables.
 
 ---
 
@@ -290,28 +323,30 @@ railway up
 ```
 /ai
   ├── ✨ AI Metadata → send hint → Gemini generates title + description + tags
-  └── 🎙 AI Captions → send video → Whisper transcribes → .srt file returned
+  └── 🎙 AI Captions → send video → Whisper transcribes audio → .srt file returned
 ```
 
-Whisper model sizes (set via `WHISPER_MODEL`):
+**Whisper model sizes** (set via `WHISPER_MODEL` in `.env`):
 
-| Model | RAM | Speed | Accuracy |
-|---|---|---|---|
-| `tiny` | ~390MB | fastest | basic |
-| `base` | ~500MB | fast | good ✅ |
-| `small` | ~1GB | medium | better |
-| `medium` | ~3GB | slow | best |
+| Model | RAM needed | Speed | Accuracy | Recommended for |
+|---|---|---|---|---|
+| `tiny` | ~400MB | fastest | basic | Render / cloud free tiers ✅ |
+| `base` | ~500MB | fast | good | Local / Azure 512MB |
+| `small` | ~1GB | medium | better | Azure 1GB+ |
+| `medium` | ~3GB | slow | best | Local only |
 
 ---
 
 ## Known Limitations
 
-- YouTube Data API free quota: ~6 uploads/day per key (add more via `/addkey`)
-- Telegram MTProto: up to 2GB per file (4GB with Telegram Premium)
+- YouTube Data API free quota: ~6 uploads/day per key (add more keys via `/addkey`)
+- Telegram MTProto file size: up to 2GB (4GB with Telegram Premium)
 - Cards, End Screens, Audio replacement — not available via YouTube Data API
 - OAuth token auto-refreshed on next use
 - In-memory queue — bot restart clears pending uploads (use Redis for production)
-- Whisper captions: max recommended file size 500MB for reasonable speed
+- Whisper AI captions: max recommended 500MB video for reasonable speed
+- Whisper requires ~400–3000MB RAM depending on model — use `tiny` on free cloud tiers
+- Render free tier: bot sleeps after 15 min inactivity, first wake-up is slow
 
 ---
 
@@ -328,15 +363,10 @@ cd GramUploader
 
 ```bash
 git checkout -b feature/your-feature-name
-# or
 git checkout -b fix/bug-description
 ```
 
-Branch naming:
-- `feature/` — new feature
-- `fix/` — bug fix
-- `docs/` — documentation only
-- `refactor/` — code cleanup, no behavior change
+Branch naming: `feature/` · `fix/` · `docs/` · `refactor/`
 
 ### 3. Code Style
 
@@ -351,7 +381,7 @@ Branch naming:
 ```
 feat: add scheduled publish support
 fix: oauth token refresh not awaited
-docs: update Azure deploy steps
+docs: update Render deploy steps
 refactor: move progress bar to formatters
 ```
 
@@ -362,47 +392,44 @@ refactor: move progress bar to formatters
 ### v2.1.0 — 2026-03-14
 
 **Bug Fixes**
-- `handlers/start.py` — `cb_manage_open` and `cb_ai_menu` were outside `register()` due to wrong indentation; fixed
-- `services/youtube_uploader.py` — replaced non-existent `get_youtube_token`, `save_youtube_token`, `get_active_api_key`, `increment_key_usage` with correct `user_repo` / `apikey_repo` calls
-- `services/youtube_uploader.py` — token refresh now properly awaited via `asyncio.to_thread`
-- `services/oauth_server.py` — replaced non-existent `save_youtube_token`, `upsert_user` with `user_repo.set_youtube_token()` / `user_repo.upsert()`
-- `services/oauth_server.py` — `refresh_token or ""` guard added for first-time auth
+- `handlers/start.py` — `cb_manage_open` and `cb_ai_menu` were accidentally outside `register()` (indentation bug); fixed
+- `services/youtube_uploader.py` — replaced non-existent old DB functions with correct `user_repo` / `apikey_repo` calls; token refresh now properly awaited
+- `services/oauth_server.py` — replaced non-existent `save_youtube_token` / `upsert_user` with `user_repo` calls; `refresh_token or ""` guard added
 
 **Structure**
-- `services/yt_manager.py` → renamed to `services/youtube_manager.py`
-- `utils/manager_keyboards.py` → moved to `utils/manage/keyboards.py`
-- `utils/manager_messages.py` → moved to `utils/manage/messages.py`
-- `handlers/video_handler.py` (old v1 file) — deleted
-- Junk folder `{handlers,services,...}/` — deleted
-- All imports updated to reflect new paths
+- `services/yt_manager.py` → `services/youtube_manager.py`
+- `utils/manager_keyboards.py` → `utils/manage/keyboards.py`
+- `utils/manager_messages.py` → `utils/manage/messages.py`
+- `handlers/video_handler.py` (old v1 file) deleted
+- All imports updated
+
+**Render Support**
+- `render.yaml` added — auto-detected on Render deploy
+- `Procfile` fixed — single `python main.py` command
+- `config.py` — reads `$PORT` env var (required by Render)
+- `Dockerfile` — added `ffmpeg`, `g++`, `python3-dev`, `/app/logs` dir
+- `services/ai_service.py` — RAM check before Whisper model load; lazy import with clear error
+- `requirements.txt` — added `psutil` for RAM check
 
 ### v2.0.0 — 2026-03-13
 
 **YouTube Studio Panel**
-- `/manage` command — full video management from Telegram
-- Edit title, description, tags, category, privacy
-- Set custom thumbnail, upload/delete captions (.srt)
-- Playlist management, advanced settings, channel stats
+- `/manage` — full video management: edit, delete, thumbnail, captions, playlists, advanced settings, stats
 
 **AI Features**
-- `/ai` command — Gemini 1.5 Flash metadata generation
-- Whisper speech-to-text captions (.srt output)
-- `✨ AI Suggest` + `🔄 Regen Title` buttons on upload confirm screen
+- `/ai` — Gemini 1.5 Flash metadata · Whisper captions
+- `✨ AI Suggest` + `🔄 Regen Title` on upload confirm screen
 
 **Other**
 - `fonts.py` — `sc()` Unicode small caps utility
 - New `/start` message design
-- Azure Container Instances deploy (`Dockerfile` + `deploy.sh`)
+- Azure deploy: `Dockerfile` + `deploy.sh`
 - `.gitignore` added
 
 ### v1.0.0 — 2026-02-01
 
 **Initial Release**
 - Telegram → YouTube upload with live progress
-- Upload confirmation screen
-- In-memory queue worker
-- Google OAuth2 via FastAPI
-- MongoDB Atlas with Motor async
-- Free / Premium plans
-- Admin panel, history, quota, settings
-- English & Malayalam support
+- Upload confirmation, queue worker, Google OAuth2
+- MongoDB Atlas, free/premium plans, admin panel
+- History, quota, settings, English & Malayalam
