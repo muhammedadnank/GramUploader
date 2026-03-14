@@ -7,6 +7,7 @@ to avoid Pyrogram handler conflicts.
 """
 
 from pyrogram import Client, filters
+from pyrogram import enums
 from pyrogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from core.middlewares import apply_middlewares
 from services.youtube_manager import (
@@ -61,7 +62,7 @@ def register(app: Client):
             if not videos:
                 await msg.edit_text(
                     "📭 <b>No videos found.</b>\n\nUpload a video first!",
-                    parse_mode="HTML"
+                    parse_mode=enums.ParseMode.HTML
                 )
                 return
             await msg.edit_text(
@@ -71,7 +72,7 @@ def register(app: Client):
                     next_token=data.get("nextPageToken"),
                     prev_token=data.get("prevPageToken")
                 ),
-                parse_mode="HTML"
+                parse_mode=enums.ParseMode.HTML
             )
         except Exception as e:
             await msg.edit_text(f"❌ {e}")
@@ -95,7 +96,7 @@ def register(app: Client):
                     next_token=data.get("nextPageToken"),
                     prev_token=data.get("prevPageToken")
                 ),
-                parse_mode="HTML"
+                parse_mode=enums.ParseMode.HTML
             )
         except Exception as e:
             await cq.message.edit_text(f"❌ {e}")
@@ -111,7 +112,7 @@ def register(app: Client):
             await cq.message.edit_text(
                 ManagerMessages.video_panel(video),
                 reply_markup=ManagerKeyboards.video_panel(video_id),
-                parse_mode="HTML"
+                parse_mode=enums.ParseMode.HTML
             )
         except Exception as e:
             await cq.message.edit_text(f"❌ {e}")
@@ -126,7 +127,7 @@ def register(app: Client):
             await cq.message.edit_text(
                 ManagerMessages.channel_stats(channel),
                 reply_markup=Keyboards.back_to_start(),
-                parse_mode="HTML"
+                parse_mode=enums.ParseMode.HTML
             )
         except Exception as e:
             await cq.message.edit_text(f"❌ {e}")
@@ -139,7 +140,7 @@ def register(app: Client):
         video = await get_video_details(cq.from_user.id, video_id)
         current = video["snippet"]["title"]
         set_state(cq.from_user.id, STATE_EDIT_TITLE, video_id=video_id)
-        await cq.message.edit_text(ManagerMessages.edit_prompt("Title", current), parse_mode="HTML")
+        await cq.message.edit_text(ManagerMessages.edit_prompt("Title", current), parse_mode=enums.ParseMode.HTML)
 
     # ─── EDIT DESCRIPTION ───────────────────────────────────────
 
@@ -149,7 +150,7 @@ def register(app: Client):
         video = await get_video_details(cq.from_user.id, video_id)
         current = video["snippet"].get("description", "")
         set_state(cq.from_user.id, STATE_EDIT_DESC, video_id=video_id)
-        await cq.message.edit_text(ManagerMessages.edit_prompt("Description", current), parse_mode="HTML")
+        await cq.message.edit_text(ManagerMessages.edit_prompt("Description", current), parse_mode=enums.ParseMode.HTML)
 
     # ─── EDIT TAGS ──────────────────────────────────────────────
 
@@ -159,7 +160,7 @@ def register(app: Client):
         video = await get_video_details(cq.from_user.id, video_id)
         current_tags = ", ".join(video["snippet"].get("tags", []))
         set_state(cq.from_user.id, STATE_EDIT_TAGS, video_id=video_id)
-        await cq.message.edit_text(ManagerMessages.edit_prompt("Tags", current_tags or "No tags"), parse_mode="HTML")
+        await cq.message.edit_text(ManagerMessages.edit_prompt("Tags", current_tags or "No tags"), parse_mode=enums.ParseMode.HTML)
 
     # ─── PRIVACY ────────────────────────────────────────────────
 
@@ -171,7 +172,7 @@ def register(app: Client):
         await cq.message.edit_text(
             f"🔒 <b>Change Privacy</b>\n\nCurrent: <b>{current.capitalize()}</b>",
             reply_markup=ManagerKeyboards.privacy(video_id, current),
-            parse_mode="HTML"
+            parse_mode=enums.ParseMode.HTML
         )
 
     @app.on_callback_query(filters.regex(r"^mgr_set_privacy:(\w+):(.+)$"))
@@ -185,7 +186,7 @@ def register(app: Client):
             await cq.message.edit_text(
                 ManagerMessages.video_panel(video),
                 reply_markup=ManagerKeyboards.video_panel(video_id),
-                parse_mode="HTML"
+                parse_mode=enums.ParseMode.HTML
             )
         except Exception as e:
             await cq.answer(f"❌ {e}", show_alert=True)
@@ -200,7 +201,7 @@ def register(app: Client):
         await cq.message.edit_text(
             "🗂 <b>Select Category</b>",
             reply_markup=ManagerKeyboards.category(video_id, current),
-            parse_mode="HTML"
+            parse_mode=enums.ParseMode.HTML
         )
 
     @app.on_callback_query(filters.regex(r"^mgr_set_category:(\w+):(.+)$"))
@@ -214,7 +215,7 @@ def register(app: Client):
             await cq.message.edit_text(
                 ManagerMessages.video_panel(video),
                 reply_markup=ManagerKeyboards.video_panel(video_id),
-                parse_mode="HTML"
+                parse_mode=enums.ParseMode.HTML
             )
         except Exception as e:
             await cq.answer(f"❌ {e}", show_alert=True)
@@ -225,7 +226,7 @@ def register(app: Client):
     async def cb_thumbnail(client: Client, cq: CallbackQuery):
         video_id = cq.matches[0].group(1)
         set_state(cq.from_user.id, STATE_THUMBNAIL, video_id=video_id)
-        await cq.message.edit_text(ManagerMessages.thumbnail_prompt(video_id), parse_mode="HTML")
+        await cq.message.edit_text(ManagerMessages.thumbnail_prompt(video_id), parse_mode=enums.ParseMode.HTML)
 
     # ─── PLAYLISTS ──────────────────────────────────────────────
 
@@ -239,13 +240,13 @@ def register(app: Client):
                 await cq.message.edit_text(
                     "📭 No playlists found.\nTap to create one.",
                     reply_markup=ManagerKeyboards.playlist_select(video_id, []),
-                    parse_mode="HTML"
+                    parse_mode=enums.ParseMode.HTML
                 )
                 return
             await cq.message.edit_text(
                 f"📋 <b>Add to Playlist</b>\n\nSelect a playlist:",
                 reply_markup=ManagerKeyboards.playlist_select(video_id, playlists),
-                parse_mode="HTML"
+                parse_mode=enums.ParseMode.HTML
             )
         except Exception as e:
             await cq.message.edit_text(f"❌ {e}")
@@ -261,7 +262,7 @@ def register(app: Client):
             await cq.message.edit_text(
                 ManagerMessages.video_panel(video),
                 reply_markup=ManagerKeyboards.video_panel(video_id),
-                parse_mode="HTML"
+                parse_mode=enums.ParseMode.HTML
             )
         except Exception as e:
             await cq.answer(f"❌ {e}", show_alert=True)
@@ -272,7 +273,7 @@ def register(app: Client):
         set_state(cq.from_user.id, STATE_NEW_PLAYLIST, video_id=video_id)
         await cq.message.edit_text(
             "➕ <b>Create Playlist</b>\n\nSend the playlist name.\nSend /cancel to abort.",
-            parse_mode="HTML"
+            parse_mode=enums.ParseMode.HTML
         )
 
     # ─── CAPTIONS ───────────────────────────────────────────────
@@ -287,7 +288,7 @@ def register(app: Client):
             await cq.message.edit_text(
                 f"📝 <b>Captions</b>\n\n{count} caption track{'s' if count != 1 else ''} found.",
                 reply_markup=ManagerKeyboards.captions(video_id, captions),
-                parse_mode="HTML"
+                parse_mode=enums.ParseMode.HTML
             )
         except Exception as e:
             await cq.message.edit_text(f"❌ {e}")
@@ -296,7 +297,7 @@ def register(app: Client):
     async def cb_upload_caption(client: Client, cq: CallbackQuery):
         video_id = cq.matches[0].group(1)
         set_state(cq.from_user.id, STATE_CAPTION_FILE, video_id=video_id)
-        await cq.message.edit_text(ManagerMessages.caption_prompt(), parse_mode="HTML")
+        await cq.message.edit_text(ManagerMessages.caption_prompt(), parse_mode=enums.ParseMode.HTML)
 
     @app.on_callback_query(filters.regex(r"^mgr_del_caption:([^:]+):(.+)$"))
     async def cb_del_caption(client: Client, cq: CallbackQuery):
@@ -309,7 +310,7 @@ def register(app: Client):
             await cq.message.edit_text(
                 f"📝 <b>Captions</b>\n\n{len(captions)} track(s) remaining.",
                 reply_markup=ManagerKeyboards.captions(video_id, captions),
-                parse_mode="HTML"
+                parse_mode=enums.ParseMode.HTML
             )
         except Exception as e:
             await cq.answer(f"❌ {e}", show_alert=True)
@@ -324,7 +325,7 @@ def register(app: Client):
         await cq.message.edit_text(
             "⚙️ <b>Advanced Settings</b>",
             reply_markup=ManagerKeyboards.advanced(video_id, status),
-            parse_mode="HTML"
+            parse_mode=enums.ParseMode.HTML
         )
 
     @app.on_callback_query(filters.regex(r"^mgr_toggle_kids:(.+)$"))
@@ -362,7 +363,7 @@ def register(app: Client):
     async def cb_schedule(client: Client, cq: CallbackQuery):
         video_id = cq.matches[0].group(1)
         set_state(cq.from_user.id, STATE_SCHEDULE, video_id=video_id)
-        await cq.message.edit_text(ManagerMessages.schedule_prompt(), parse_mode="HTML")
+        await cq.message.edit_text(ManagerMessages.schedule_prompt(), parse_mode=enums.ParseMode.HTML)
 
     # ─── STATS ──────────────────────────────────────────────────
 
@@ -380,7 +381,7 @@ def register(app: Client):
             reply_markup=InlineKeyboardMarkup([[
                 InlineKeyboardButton("« Back", callback_data=f"mgr_video:{video_id}")
             ]]),
-            parse_mode="HTML"
+            parse_mode=enums.ParseMode.HTML
         )
 
     # ─── DELETE ─────────────────────────────────────────────────
@@ -393,7 +394,7 @@ def register(app: Client):
         await cq.message.edit_text(
             ManagerMessages.delete_confirm(title),
             reply_markup=ManagerKeyboards.delete_confirm(video_id),
-            parse_mode="HTML"
+            parse_mode=enums.ParseMode.HTML
         )
 
     @app.on_callback_query(filters.regex(r"^mgr_delete_do:(.+)$"))
@@ -403,6 +404,6 @@ def register(app: Client):
             video = await get_video_details(cq.from_user.id, video_id)
             title = video["snippet"]["title"]
             await delete_video(cq.from_user.id, video_id)
-            await cq.message.edit_text(ManagerMessages.delete_done(title), parse_mode="HTML")
+            await cq.message.edit_text(ManagerMessages.delete_done(title), parse_mode=enums.ParseMode.HTML)
         except Exception as e:
             await cq.answer(f"❌ {e}", show_alert=True)
