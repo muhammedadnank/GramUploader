@@ -82,7 +82,7 @@ class Keyboards:
         return InlineKeyboardMarkup([
             [
                 InlineKeyboardButton("✅ Upload Now", callback_data=f"upload_confirm:{upload_id}"),
-                InlineKeyboardButton("❌ Cancel", callback_data=f"upload_cancel:{upload_id}"),
+                InlineKeyboardButton("🗑 Discard", callback_data=f"upload_cancel:{upload_id}"),
             ],
             [
                 InlineKeyboardButton("✏️ Edit Title", callback_data=f"upload_edit_title:{upload_id}"),
@@ -149,16 +149,17 @@ class Keyboards:
     # ─── ADMIN ──────────────────────────────────────────────────
 
     @staticmethod
-    def admin_panel() -> InlineKeyboardMarkup:
+    def admin_panel(maintenance: bool = False) -> InlineKeyboardMarkup:
+        if maintenance:
+            maint_btn = InlineKeyboardButton("✅ Maintenance OFF", callback_data="admin_maintenance_off")
+        else:
+            maint_btn = InlineKeyboardButton("🔧 Maintenance ON", callback_data="admin_maintenance_on")
         return InlineKeyboardMarkup([
             [
                 InlineKeyboardButton("🔑 API Keys", callback_data="admin_keys"),
                 InlineKeyboardButton("📢 Broadcast", callback_data="admin_broadcast"),
             ],
-            [
-                InlineKeyboardButton("🔧 Maintenance ON", callback_data="admin_maintenance_on"),
-                InlineKeyboardButton("✅ Maintenance OFF", callback_data="admin_maintenance_off"),
-            ],
+            [maint_btn],
             [
                 InlineKeyboardButton("🔄 Refresh Stats", callback_data="admin_stats"),
             ],
