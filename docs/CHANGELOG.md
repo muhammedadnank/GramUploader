@@ -5,6 +5,88 @@ Format: `[vX.Y.Z] — YYYY-MM-DD`
 
 ---
 
+## [v2.2.0] — 2026-03-14
+
+### Critical Bug Fixes
+
+- **FSM handler conflict** — `manage.py`, `ai.py`, and `video.py` were each registering their own
+  `filters.text & filters.private` and `filters.document & filters.private` handlers. Pyrogram fires
+  the first matching handler and ignores the rest, so AI FSM (`STATE_WAIT_HINT`) and Whisper caption
+  input (`STATE_WAIT_VIDEO`) were silently unreachable. Fixed by extracting all FSM text/photo/document
+  routing into a new `handlers/fsm_router.py` that is registered last, after all command and callback
+  handlers. Priority order: upload title edit → AI FSM → manage FSM → video upload fallback.
+
+- **Broadcast sent hardcoded string** — `/broadcast` replied to admin's message correctly but the
+  callback always sent `"📢 Announcement from bot admin."` instead of forwarding the actual replied
+  message. Fixed: `_broadcast_msg` dict stores the replied `Message` object per admin; the confirm
+  callback calls `source_msg.forward(uid)` for each user.
+
+- **Blocking `flow.fetch_token()` in async OAuth route** — `fetch_token()` is a synchronous network
+  call (200–2000ms) that was awaited directly inside a FastAPI async route, blocking the entire uvicorn
+  event loop for the duration of the Google token exchange. Fixed with
+  `await asyncio.to_thread(flow.fetch_token, code=code)`.
+
+- **Document handler race between manage FSM and video upload** — `manage.py` registered a
+  `filters.document` handler for `.srt` caption uploads; `video.py` registered another for video
+  uploads. A document sent while in `STATE_CAPTION_FILE` could be routed to the wrong handler.
+  Resolved by the central `fsm_router.py` which checks FSM state before deciding whether to treat
+  a document as a caption file, a Whisper AI video, or a regular video upload.
+
+### Bug Fixes
+
+- **`upload_edit_title` button had no handler** — the keyboard button with
+  `callback_data="upload_edit_title:<key>"` existed but no `on_callback_query` handler matched it;
+  clicking silently did nothing. Handler added in `video.py`; title edit state tracked via
+  `_pending_edit` dict and resolved in `fsm_router.py`.
+
+- **`admin_keys` and `admin_broadcast` buttons had no handlers** — both buttons in the admin panel
+  keyboard had `callback_data` values with no matching handlers. Added `cb_admin_keys` (lists all
+  API keys with usage) and `cb_admin_broadcast` (usage instructions) in `admin.py`.
+
+- **`set_status()` mutable default argument** — `async def set_status(..., extra: dict = {})` used a
+  mutable default argument, a classic Python bug where a mutated dict persists across calls.
+  Fixed: `extra: dict = None`, then `extra = extra or {}` inside the function.
+
+- **`increment_usage()` KeyError on missing `_id`** — `apikey_repo.get_active()` returns a raw MongoDB
+  dict; if `_id` was somehow absent, `api_key_doc["_id"]` raised `KeyError`. Added
+  `if key_id is None: return` guard in `increment_usage()`.
+
+- **Whisper audio path brittle string replacement** — audio extraction used
+  `.replace(".mp4", ".wav").replace(".mkv", ".wav")` which failed silently for any other extension
+  and produced wrong paths for files like `video.mp4.part`. Fixed with `os.path.splitext()`:
+  `base, _ = os.path.splitext(video_path); audio_path = base + "_audio.wav"`.
+
+- **Schedule FSM gave no format feedback** — invalid datetime input raised `ValueError` caught by the
+  outer `except Exception`, giving users a cryptic `❌ Error: ...` message. Now catches `ValueError`
+  specifically and replies with the correct format and an example.
+
+### Improvements
+
+- **`_pending` TTL** — upload confirmation entries in the in-memory `_pending` dict never expired,
+  causing a slow memory leak under heavy use. Each entry now stores a `_ts` timestamp; a
+  `_cleanup_pending()` call on every new upload removes entries older than 10 minutes.
+
+- **Startup stuck-job recovery** — on restart, uploads with status `PENDING` or `DOWNLOADING` (left
+  over from a crash) are now automatically marked `FAILED` with a clear message
+  `"Bot restarted during upload. Please resend the video."` so users are not left waiting indefinitely.
+
+- **Startup config validation** — `main.py` now logs a warning if `ADMIN_IDS` is empty (no admin
+  access possible), `BOT_TOKEN` is missing (exits early), or Google OAuth credentials are unset.
+
+### Structure
+
+- `handlers/fsm_router.py` — new file; sole handler for `filters.text`, `filters.photo`,
+  and `filters.document` in private chats
+- `handlers/manage.py` — FSM text/photo/document handlers removed; only command + callback handlers remain
+- `handlers/ai.py` — FSM text/video handlers removed; only command + callback handlers remain
+- `handlers/video.py` — `handle_video_upload()` extracted as a standalone async function callable
+  from `fsm_router`; `_pending_edit` dict added for upload title edit FSM
+- `handlers/__init__.py` — `fsm_router.register(app)` added as the last registration step
+- `database/repositories/upload_repo.py` — `get_stuck_jobs()` method added for startup recovery
+- `database/repositories/apikey_repo.py` — `None` guard in `increment_usage()`
+
+---
+
 ## [v2.1.0] — 2026-03-14
 
 ### Bug Fixes
