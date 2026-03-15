@@ -22,8 +22,8 @@ def _dual_progress(dl_pct: int, ul_pct: int) -> str:
     dl_label = "✅" if dl_pct >= 100 else f"<b>{dl_pct}%</b>"
     ul_label = "✅" if ul_pct >= 100 else f"<b>{ul_pct}%</b>"
     return (
-        f"📥 Download: {dl_bar} {dl_label}\n"
-        f"📤 Upload:   {ul_bar} {ul_label}"
+        f"📥 download: {dl_bar} {dl_label}\n"
+        f"📤 upload:   {ul_bar} {ul_label}"
     )
 
 
@@ -36,28 +36,28 @@ class Messages:
         # UPGRADE #1: different content for connected vs not
         if connected:
             status = (
-                "✅ <b>YouTube Connected</b>\n"
+                "✅ <b>youtube connected</b>\n"
                 "━━━━━━━━━━━━━━━━━━━━━\n"
-                "Just send me a video to upload!"
+                "just send me a video to upload!"
             )
         else:
             status = (
-                "⚠️ <b>YouTube not linked yet</b>\n"
+                "⚠️ <b>youtube not linked yet</b>\n"
                 "━━━━━━━━━━━━━━━━━━━━━\n"
-                "Tap <b>Connect YouTube</b> below to get started."
+                "tap <b>connect youtube</b> below to get started."
             )
         return (
-            f"Hey, {mention}\n"
-            f"Welcome to GramUploader!\n\n"
-            f"Upload your Telegram videos directly\n"
-            f"to YouTube — fast, simple, private.\n"
+            f"hey, {mention}\n"
+            f"welcome to gramuploader!\n\n"
+            f"upload your telegram videos directly\n"
+            f"to youtube — fast, simple, private.\n"
             f"━━━━━━━━━━━━━━━━━━━━━\n\n"
-            f"📌 <b>What I can do:</b>\n"
-            f"  ▸ Upload videos with live progress\n"
-            f"  ▸ Manage title, tags &amp; privacy\n"
-            f"  ▸ Add captions &amp; thumbnails\n"
-            f"  ▸ Organize into playlists\n"
-            f"  ▸ Edit videos after upload\n\n"
+            f"📌 <b>what i can do:</b>\n"
+            f"  ▸ upload videos with live progress\n"
+            f"  ▸ manage title, tags &amp; privacy\n"
+            f"  ▸ add captions &amp; thumbnails\n"
+            f"  ▸ organize into playlists\n"
+            f"  ▸ edit videos after upload\n\n"
             f"━━━━━━━━━━━━━━━━━━━━━\n"
             f"{status}\n"
             f"━━━━━━━━━━━━━━━━━━━━━"
@@ -67,41 +67,41 @@ class Messages:
     def help_text() -> str:
         # UPGRADE #8: added /disconnect and /queue
         return (
-            "📖 <b>How to use this bot:</b>\n\n"
-            "<b>1. Connect YouTube</b>\n"
-            "   Tap /connect → Authorize Google account\n\n"
-            "<b>2. Send a Video</b>\n"
-            "   Send any video/document file\n"
-            "   Add caption → becomes YouTube title\n\n"
-            "<b>3. Track Progress</b>\n"
-            "   Live download + upload progress\n"
-            "   Get YouTube link when done\n\n"
-            "📋 <b>Commands:</b>\n"
-            "   /start — Main menu\n"
-            "   /connect — Link YouTube\n"
-            "   /disconnect — Unlink YouTube\n"
-            "   /manage — YouTube Studio panel\n"
-            "   /history — Upload history\n"
-            "   /quota — Today's usage\n"
-            "   /queue — Upload queue status\n"
-            "   /settings — Preferences\n"
-            "   /cancel — Cancel current input"
+            "📖 <b>how to use this bot:</b>\n\n"
+            "<b>1. connect youtube</b>\n"
+            "   tap /connect → authorize google account\n\n"
+            "<b>2. send a video</b>\n"
+            "   send any video/document file\n"
+            "   add caption → becomes youtube title\n\n"
+            "<b>3. track progress</b>\n"
+            "   live download + upload progress\n"
+            "   get youtube link when done\n\n"
+            "📋 <b>commands:</b>\n"
+            "   /start — main menu\n"
+            "   /connect — link youtube\n"
+            "   /disconnect — unlink youtube\n"
+            "   /manage — youtube studio panel\n"
+            "   /history — upload history\n"
+            "   /quota — today's usage\n"
+            "   /queue — upload queue status\n"
+            "   /settings — preferences\n"
+            "   /cancel — cancel current input"
         )
 
     @staticmethod
     def about_text() -> str:
         return (
-            "ℹ️ <b>About This Bot</b>\n\n"
-            "🤖 <b>GramUploader</b>\n"
-            f"📦 Version: {Config.VERSION}\n\n"
-            "Upload your Telegram videos directly to\n"
-            "YouTube with one click — no PC needed.\n\n"
-            "⚙️ <b>Tech Stack:</b>\n"
-            "  • Kurigram (MTProto)\n"
-            "  • YouTube Data API v3\n"
-            "  • MongoDB Atlas\n"
-            "  • FastAPI (OAuth2)\n\n"
-            "🔒 Your data is safe & never shared."
+            "ℹ️ <b>about this bot</b>\n\n"
+            "🤖 <b>gramuploader</b>\n"
+            f"📦 version: {Config.VERSION}\n\n"
+            "upload your telegram videos directly to\n"
+            "youtube with one click — no pc needed.\n\n"
+            "⚙️ <b>tech stack:</b>\n"
+            "  • kurigram (mtproto)\n"
+            "  • youtube data api v3\n"
+            "  • mongodb atlas\n"
+            "  • fastapi (oauth2)\n\n"
+            "🔒 your data is safe & never shared."
         )
 
     # ─── CONNECT / AUTH ─────────────────────────────────────────
@@ -109,20 +109,20 @@ class Messages:
     @staticmethod
     def connect_text() -> str:
         return (
-            "🔗 <b>Connect Your YouTube Channel</b>\n\n"
-            "Tap the button below to authorize.\n"
-            "You'll be redirected to Google.\n\n"
-            "✅ One-time setup — stays connected\n"
-            "🔒 We only request upload permissions"
+            "🔗 <b>connect your youtube channel</b>\n\n"
+            "tap the button below to authorize.\n"
+            "you'll be redirected to google.\n\n"
+            "✅ one-time setup — stays connected\n"
+            "🔒 we only reQuest upload permissions"
         )
 
     @staticmethod
     def already_connected() -> str:
         return (
-            "✅ <b>YouTube Already Connected!</b>\n\n"
-            "Just send me a video to upload.\n\n"
-            "Want to reconnect a different account?\n"
-            "Tap <b>Reconnect</b> below."
+            "✅ <b>youtube already connected!</b>\n\n"
+            "just send me a video to upload.\n\n"
+            "want to reconnect a different account?\n"
+            "tap <b>reconnect</b> below."
         )
 
     # ─── UPLOAD CONFIRMATION ────────────────────────────────────
@@ -230,8 +230,8 @@ class Messages:
     @staticmethod
     def history_empty() -> str:
         return (
-            "📭 <b>No Uploads Yet</b>\n\n"
-            "Send me a video to get started!"
+            "📭 <b>no uploads yet</b>\n\n"
+            "send me a video to get started!"
         )
 
     @staticmethod
@@ -357,8 +357,8 @@ class Messages:
     @staticmethod
     def not_connected() -> str:
         return (
-            "❌ <b>YouTube Not Connected</b>\n\n"
-            "Use /connect to link your channel first."
+            "❌ <b>youtube not connected</b>\n\n"
+            "use /connect to link your channel first."
         )
 
     @staticmethod
