@@ -5,7 +5,6 @@ Use Keyboards.xxx() everywhere.
 
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from config import Config
-from handlers.video import _pending, _pending_edit, _pending_thumb
 
 
 class Keyboards:
