@@ -2,7 +2,6 @@
 Manager panel message templates — YouTube Studio-like
 """
 from services.youtube_manager import format_duration, format_count
-from handlers.video import _pending, _pending_edit, _pending_thumb
 
 
 class ManagerMessages:
