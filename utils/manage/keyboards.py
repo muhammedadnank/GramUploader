@@ -2,7 +2,6 @@
 Manager panel keyboards — YouTube Studio-like UI
 """
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from handlers.video import _pending, _pending_edit, _pending_thumb
 
 
 class ManagerKeyboards:
