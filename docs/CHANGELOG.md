@@ -5,161 +5,145 @@ Format: `[vX.Y.Z] — YYYY-MM-DD`
 
 ---
 
+## [v2.7.0] — 2026-03-15
+
+### Added
+
+- **Dual-stage progress bars** (`utils/messages.py` — `_dual_progress()`) — download and
+  upload progress are now shown side-by-side in the same message throughout the upload flow:
+  `📥 Download: [██████░░░░] 60%` / `📤 Upload: [░░░░░░░░░░] 0%`. Both bars update live.
+  `Messages.progress_downloading()` and `Messages.progress_uploading()` updated accordingly.
+
+- **Upload done — YouTube thumbnail card** (`services/queue_worker.py`) — on successful
+  upload, the progress message is deleted and the video's YouTube thumbnail is sent as a
+  photo with the done caption and action buttons (`Watch`, `Manage Video`, `History`).
+  URL: `https://img.youtube.com/vi/{video_id}/hqdefault.jpg`. Falls back to plain text if
+  the thumbnail fetch fails.
+
+- **Video duration on confirmation screen** (`handlers/video.py`, `utils/messages.py`) —
+  `message.video.duration` is captured and shown as `⏱ Duration: 2:34`. Stored in
+  `_pending` and carried through privacy-change and back-navigation re-renders.
+  Not available for documents (Telegram doesn't expose duration for those).
+
+- **Shorts eligibility hint** — if `duration ≤ 60s`, the duration line appends
+  `📱 Shorts eligible`. Informational only — no automatic `#Shorts` tag added.
+
+- **File type emoji on confirmation screen** (`_FILE_TYPE_EMOJI` dict in `messages.py`) —
+  `🎬` mp4/mov · `📦` mkv · `🌐` webm · `📼` avi/wmv/flv/mpeg · `📱` 3gp · `🎞` unknown.
+
+- **Upload history dates** (`Messages.history_page()`) — each entry now shows the upload
+  date as `· 14 Mar` in italic, pulled from `Upload.created_at`.
+
+- **Quota reset countdown** (`Messages.quota_text()`) — shows `🕐 Resets in 3h 42m`
+  computed live from `datetime.now(timezone.utc)` to midnight UTC, replacing the static hint.
+
+- **Connected YouTube channel name in Settings** (`_send_settings()` in `start.py`,
+  `Messages.settings_text()`) — shows `📺 Channel: <name>` when connected, fetched via
+  `get_channel_stats()`. Silently omitted if the call fails.
+
+- **Live queue depth in Admin Stats** (`_fetch_stats()` in `admin.py`,
+  `Messages.admin_stats()`) — shows `⏳ Queue: N pending` when the queue is non-empty.
+  Hidden when queue is 0 to keep the panel clean.
+
+- **Help text updated** — `/disconnect` and `/queue` added to the command list in
+  `Messages.help_text()`.
+
+### Fixed
+
+- **`admin_user_info()` `AttributeError` on `user.plan`** — after `use_enum_values: True`
+  was added in v2.6.0, `user.plan` is a plain string. Calling `.value` on it crashed.
+  Fixed with `user.plan if isinstance(user.plan, str) else user.plan.value`.
+
+- **Start screen identical for connected/disconnected users** — connected users saw the same
+  "Tap Connect below" text as new users. Screen now branches: connected → "Just send me a
+  video!"; disconnected → connect call-to-action.
+
+### Changed
+
+- **`Messages.upload_confirm()`** — optional `duration: int = None` param added.
+- **`Messages.settings_text()`** — optional `channel_name: str = None` param added.
+- **`Messages.admin_stats()`** — optional `queue_size: int = 0` param added.
+- **`Messages.upload_done()`** — optional `privacy: str = "public"` param added.
+- **Version** bumped to `2.7.0` in `config.py`.
+
+---
+
 ## [v2.6.0] — 2026-03-14
 
 ### Added
 
-- **`/disconnect`** — users can now unlink their YouTube account from the bot.
-  Wipes `youtube_token` and sets `youtube_connected: false` in the DB via the new
-  `user_repo.clear_youtube_token()` method. Previously there was no way to unlink
-  without admin DB intervention.
+- **`/disconnect`** — users can unlink their YouTube account. Wipes `youtube_token` and
+  sets `youtube_connected: false` via new `user_repo.clear_youtube_token()`.
 
-- **`user_repo.clear_youtube_token()`** — new repository method that nulls out the
-  stored OAuth token and marks the user as disconnected.
+- **`user_repo.iter_all_ids()`** — memory-safe async generator for broadcast; streams one
+  ID at a time instead of loading all users into RAM.
 
-- **`user_repo.iter_all_ids()`** — memory-safe async generator for broadcast.
-  Yields one `telegram_id` at a time from a Motor cursor instead of loading the
-  entire user collection into a Python list (`to_list(length=None)`), which would
-  OOM the process at scale.
+- **`database/db.py` — `ensure_indexes()`** — creates MongoDB indexes on startup
+  (idempotent). Indexes: `uploads.telegram_id`, `uploads.status`, `uploads.created_at`,
+  compound `(telegram_id, created_at)`, `users.youtube_connected`, `users.is_banned`.
 
-- **`database/db.py` — `ensure_indexes()`** — creates all required MongoDB indexes
-  on startup (idempotent — safe to call every boot). Indexes added:
-  - `uploads.telegram_id`
-  - `uploads.status`
-  - `uploads.created_at`
-  - `uploads.(telegram_id, created_at)` compound
-  - `users.youtube_connected`
-  - `users.is_banned`
-
-- **Post-OAuth Telegram notification** — after a user completes the Google OAuth
-  flow in the browser, the bot now sends them a `"✅ YouTube Connected!"` message
-  in Telegram. Previously the browser showed a success page but the bot was silent,
-  leaving users confused about whether the connection worked.
+- **Post-OAuth Telegram notification** — bot sends `✅ YouTube Connected!` after OAuth,
+  so users don't have to guess whether the flow succeeded.
 
 ### Fixed
 
-- **`UploadStatus` stored as enum object, not string** — `queue_worker.py` was
-  writing `{"status": UploadStatus.FAILED}` (the Python enum object) to MongoDB
-  instead of `{"status": "failed"}` (the string value). This caused `get_stuck_jobs()`
-  and all status-based queries to silently miss records. Fixed by using `.value`
-  on all status writes in `queue_worker.py` and `main.py` (`recover_stuck_jobs`).
+- **`UploadStatus` enum stored as object not string** — all status writes in
+  `queue_worker.py` and `main.py` now use `.value`.
 
-- **`model_config = {"use_enum_values": True}`** added to `User` and `Upload` Pydantic
-  models — ensures enum fields are always serialized as their string values when
-  `model_dump()` is called for DB insertion. Prevents the enum-vs-string mismatch
-  from recurring as the codebase grows.
+- **`model_config = {"use_enum_values": True}`** added to `User` and `Upload` models —
+  ensures enums serialize as strings in `model_dump()`.
 
-- **Downloaded temp file never deleted on successful upload** — `process_job` called
-  `msg.download()` and stored the local path, then passed it to `upload_to_youtube()`.
-  The uploader's `finally` block only cleans up files *it* downloads internally; the
-  outer `process_job` temp file was never removed. Fixed with a `finally` block in
-  `process_job` that deletes `file_path` after the upload (success or failure).
+- **Downloaded, thumbnail, and SRT temp files never deleted** — `finally` blocks added
+  in `process_job`, `fsm_photo_router`, and `fsm_text_router` respectively.
 
-- **Thumbnail temp file never deleted** — `fsm_photo_router` downloaded the photo,
-  called `set_thumbnail()`, and never cleaned up the local image. Fixed with a
-  `finally` block that removes the downloaded path regardless of outcome.
+- **`cq.answer()` missing from all 40+ callback handlers** — Telegram showed a loading
+  spinner indefinitely. Added as the first line in every `@on_callback_query`.
 
-- **SRT caption temp file never deleted** — `fsm_document_router` downloaded the
-  `.srt` file and stored the path in FSM state. After `upload_caption()` completed
-  (resolved in `fsm_text_router`), the file on disk was never removed. Fixed with a
-  `finally` block wrapping the `upload_caption()` call.
+- **`cb_back_start` swallowed unrelated exceptions** — replaced catch-all `Exception`
+  with explicit `message.photo` check + `MessageNotModified` catch.
 
-- **`cq.answer()` missing from all callback handlers** — Telegram shows a loading
-  spinner on every inline button press until `answer()` is called (or it times out
-  after ~5s). Every `@on_callback_query` handler in `start.py`, `video.py`,
-  `admin.py`, and `manage.py` was missing this call. Added `await cq.answer()` as
-  the first line in all 40+ handlers.
+- **`/cancel` left title-edit FSM state on session expiry** — `_pending_edit.pop()`
+  now always runs before checking if `pending_key` is still alive.
 
-- **`cb_back_start` swallowed unrelated exceptions** — the handler tried
-  `edit_caption()` and caught the resulting `Exception` to fall back to
-  `edit_text()`. Any non-`MessageNotModified` error (network, Telegram API) would
-  be silently swallowed. Fixed by checking `cq.message.photo` explicitly to decide
-  which edit method to call, then catching only `MessageNotModified`.
+- **`quota_text()` `TypeError` for premium users** — `limit="∞"` caused int arithmetic
+  to crash. Fixed with `isinstance(limit, int)` guard.
 
-- **`/cancel` in title-edit FSM left state if session expired** — `_pending_edit`
-  stored the pending key for the user; if the 10-minute `_pending` TTL had already
-  expired, the key was not in `_pending`, but `_pending_edit` still had the entry.
-  The handler would silently exit, leaving the user stuck in title-edit mode forever.
-  Fixed: `_pending_edit.pop(user_id)` is now always called first regardless of
-  whether `pending_key` is still alive in `_pending`.
+- **`sanitize_title()` stripped apostrophes** — `'` removed from forbidden chars;
+  only `<`, `>`, and `"` are stripped now.
 
-- **`quota_text()` crash for premium users** — `limit="∞"` (a string) was passed to
-  `make_progress_bar()` which tried integer arithmetic on it, raising `TypeError`.
-  Fixed with an `isinstance(limit, int)` guard before computing the progress
-  percentage.
-
-- **`sanitize_title()` stripped single quotes** — apostrophes in video titles
-  (`"Today's vlog"`, `"It's fine"`) were being silently removed. Single quotes are
-  valid in YouTube titles. Removed `'` from the forbidden character list; only
-  `<`, `>`, and `"` are stripped.
-
-- **`plan.value` calls removed from handlers** — with `use_enum_values: True` on
-  the Pydantic model, `user.plan` is already a plain string after DB round-trip.
-  Calling `.value` on it raises `AttributeError`. All `user.plan.value` references
-  in `start.py` and `admin.py` replaced with `user.plan`.
-
-- **`imports` ordering in `manage.py`** — `_safe_edit()` was defined between two
-  import blocks (after `from pyrogram import …` but before `from pyrogram.types
-  import …`). This is syntactically valid but confusing and a lint warning. All
-  imports moved to the top; `_safe_edit` defined after.
-
-- **Broadcast loaded all user IDs into RAM** — `get_all_ids()` called
-  `cursor.to_list(length=None)`, pulling every user document into a Python list
-  before iterating. Replaced broadcast loop with `iter_all_ids()` async generator
-  that streams one ID at a time from the Motor cursor.
+- **Broadcast OOM** — replaced `get_all_ids()` with `iter_all_ids()` async generator.
 
 ### Changed
 
-- **`config.py` — `GEMINI_API_KEY` fully removed** — `render.yaml` still declared this
-  env var even after v2.4.0 removed the Gemini integration, creating a confusing dead
-  config entry. Removed from `config.py`, `render.yaml`, and `core/env.example`.
+- **`GEMINI_API_KEY`** removed from `config.py`, `render.yaml`, `core/env.example` —
+  AI features were fully removed in v2.3.0–v2.4.0; dead config entries cleaned up.
 
-- **`core/env.example` — AI section removed** — `GEMINI_API_KEY` and `WHISPER_MODEL`
-  entries removed since both AI features were removed in v2.3.0 and v2.4.0.
+- **Version** bumped to `2.6.0` in `config.py`.
 
 ---
 
+## [v2.5.0] — 2026-03-14
 
 ### Added
 
-- **`/user <id>`** — new admin command to inspect any user's details (name, username,
-  plan, ban status, YouTube connection, uploads today, total uploads) with inline
-  buttons to ban/unban and toggle plan directly from the message.
-- **`/deletekey <key>`** — deactivate a YouTube API key. `apikey_repo.deactivate()`
-  existed with no command to call it; now wired up.
-- **`/setpremium <id>` / `/setfree <id>`** — change a user's plan from command line.
-  `user_repo.set_plan()` existed with no command; now wired up.
+- **`/user <id>`** — admin command: inspect user details + inline ban/unban/plan buttons.
+- **`/deletekey <key>`** — deactivate an API key (repo method existed, command was missing).
+- **`/setpremium <id>` / `/setfree <id>`** — change plan from command line.
 - **Inline user management callbacks** — `admin_ban_user`, `admin_unban_user`,
-  `admin_set_premium`, `admin_set_free` — ban/plan changes directly from `/user` panel
-  without typing commands.
-- **`Keyboards.admin_user()`** — inline keyboard with ban/unban and plan toggle buttons,
-  state-aware (shows correct button based on current ban/plan status).
-- **`Keyboards.admin_back()`** — back button that returns to admin stats panel instead
-  of `/start` menu.
-- **`Messages.admin_user_info()`** — formatted user detail message template.
-- **`apikey_repo.find_by_key(key)`** — lookup key by value for duplicate check.
-- **`upload_repo.count_by_user(telegram_id)`** — per-user total upload count.
+  `admin_set_premium`, `admin_set_free`.
+- **`Keyboards.admin_user()`** and **`Keyboards.admin_back()`** — new keyboard layouts.
+- **`Messages.admin_user_info()`** — user detail message template.
+- **`apikey_repo.find_by_key()`** and **`upload_repo.count_by_user()`** — new repo methods.
 
 ### Fixed
 
-- **Broadcast flood** — tight loop with no delay caused Telegram 429 errors for bots
-  with more than ~50 users. Added `asyncio.sleep(0.05)` between each send (~20 msg/sec)
-  and `FloodWait` catch with `asyncio.sleep(e.value)` + retry on the same user.
-- **`/ban` silent fail on new users** — `ban()` used `update_one` without `upsert=True`,
-  so banning a user who never started the bot had no effect (no document to update).
-  Fixed with `upsert=True`.
-- **`/addkey` duplicate keys** — adding the same API key twice created two active
-  documents, causing double quota counting. Now checks `find_by_key()` first.
-- **`admin_keys` / `admin_broadcast` callbacks back to wrong panel** — both used
-  `Keyboards.back_to_start()` which goes to `/start` menu. Changed to
-  `Keyboards.admin_back()` which returns to the admin stats panel.
-- **Maintenance toggle no feedback** — `cq.answer()` fired but the stats panel was not
-  refreshed, so the admin couldn't see the change took effect. Panel now refreshes after
-  toggle.
-- **Stats code duplication** — identical ~10-line DB call block was copy-pasted between
-  `/stats` command and `admin_stats` callback. Extracted into `_fetch_stats()` helper.
-- **`admin_panel` keyboard had no back button** — admin was stuck after `/stats` with
-  no way back to the main menu. Added `« Back` → `back_start`.
+- **Broadcast flood** — added `asyncio.sleep(0.05)` + `FloodWait` retry.
+- **`/ban` silent fail on new users** — `upsert=True` added to `ban()`.
+- **`/addkey` duplicate keys** — duplicate check via `find_by_key()`.
+- **Admin panel back buttons** — `admin_keys` / `admin_broadcast` now use `admin_back()`.
+- **Maintenance toggle feedback** — stats panel refreshes after toggle.
+- **Stats code duplication** — extracted into `_fetch_stats()` helper.
+- **Admin panel missing back button** — `« Back` → `back_start` added.
 
 ---
 
