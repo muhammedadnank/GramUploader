@@ -145,10 +145,10 @@ class Messages:
 
         dur_line = ""
         if duration and duration > 0:
-            m, s = divmod(duration, 60)
+            m, s = divmod(int(duration), 60)
             h, m = divmod(m, 60)
             dur_str = f"{h}:{m:02d}:{s:02d}" if h else f"{m}:{s:02d}"
-            shorts_hint = " 📱 <i>Shorts eligible</i>" if duration <= 60 else ""
+            shorts_hint = " 📱 <i>Shorts eligible</i>" if int(duration) <= 60 else ""
             dur_line = f"⏱ Duration: <code>{dur_str}</code>{shorts_hint}\n"
 
         quota_line = "\n⚠️ <b>Last free upload today!</b> Upgrade for unlimited." if quota_warning else ""
