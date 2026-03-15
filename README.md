@@ -1,15 +1,17 @@
 # GramUploader
 
-Upload Telegram videos directly to YouTube — with a YouTube Studio-like management panel and live progress.
+Upload Telegram videos directly to YouTube — with a YouTube Studio-like management panel, dual-stage live progress, and rich upload confirmations.
 
 ## Features
 
-- **Upload** videos from Telegram to YouTube with live progress
+- **Upload** videos from Telegram to YouTube with dual-stage live progress (download + upload bars side-by-side)
+- **Rich confirmation screen** — title, size, duration, file type, privacy, Shorts detection before upload
+- **Upload done card** — YouTube thumbnail photo sent automatically on completion
 - **Manage** existing YouTube videos (edit, delete, thumbnail, captions, playlists)
-- **Confirmation screen** before upload — set title, edit title inline, privacy, cancel
-- **Queue system** — multiple uploads handled sequentially
-- **Free / Premium** plan support with daily upload limits
-- **Admin panel** — stats, broadcast, ban, API key management
+- **Queue system** — multiple uploads handled sequentially with position indicator
+- **Free / Premium** plan support with daily upload limits and reset countdown
+- **Settings panel** — shows connected YouTube channel name, default privacy, language, auto-title
+- **Admin panel** — stats (with live queue depth), broadcast, ban, API key management
 - **Multi-language** — English & Malayalam (i18n ready)
 
 ## Tech Stack
@@ -27,7 +29,7 @@ Upload Telegram videos directly to YouTube — with a YouTube Studio-like manage
 
 ```
 GramUploader/
-├── main.py                        # Entry point + startup validation + stuck-job recovery
+├── main.py                        # Entry point + startup validation + stuck-job recovery + DB indexes
 ├── config.py                      # All env config
 ├── Dockerfile                     # Docker / Azure ACI deploy
 ├── deploy.sh                      # Azure ACI one-click deploy script
@@ -42,10 +44,10 @@ GramUploader/
 │   └── middlewares.py             # Rate limit, ban check, auto user upsert
 │
 ├── database/
-│   ├── db.py                      # MongoDB connection + repo instances
-│   ├── models.py                  # Pydantic models (User, Upload, APIKey)
+│   ├── db.py                      # MongoDB connection + repo instances + ensure_indexes()
+│   ├── models.py                  # Pydantic models (User, Upload, APIKey) — use_enum_values
 │   └── repositories/
-│       ├── user_repo.py           # User CRUD
+│       ├── user_repo.py           # User CRUD + iter_all_ids() + clear_youtube_token()
 │       ├── upload_repo.py         # Upload CRUD + stuck-job query
 │       └── apikey_repo.py         # API key rotation
 │
@@ -53,25 +55,25 @@ GramUploader/
 │   ├── __init__.py                # register_all() — callbacks first, fsm_router last
 │   ├── fsm_router.py              # Central FSM: sole text/photo/document handler
 │   ├── manage.py                  # /manage — YouTube Studio panel (callbacks only)
-│   ├── start.py                   # /start /connect /history /quota /settings
-│   ├── video.py                   # Video upload handler + confirmation flow
+│   ├── start.py                   # /start /connect /disconnect /history /quota /queue /settings
+│   ├── video.py                   # Video upload handler + confirmation flow (duration, file type)
 │   └── admin.py                   # /stats /ban /broadcast /addkey
 │
 ├── services/
-│   ├── queue_worker.py            # Background upload queue processor
+│   ├── queue_worker.py            # Background upload queue processor + thumbnail done card
 │   ├── youtube_uploader.py        # Resumable YouTube upload + token refresh
 │   ├── youtube_manager.py         # YouTube Studio API (edit/delete/captions/playlists)
-│   └── oauth_server.py            # FastAPI Google OAuth2 callback server
+│   └── oauth_server.py            # FastAPI Google OAuth2 callback server + Telegram notify
 │
 ├── utils/
-│   ├── messages.py                # All bot message templates
+│   ├── messages.py                # All bot message templates (dual progress, quota countdown, channel name)
 │   ├── keyboards.py               # All inline keyboard layouts
 │   ├── manage/
 │   │   ├── __init__.py
 │   │   ├── keyboards.py           # /manage panel keyboards
 │   │   └── messages.py            # /manage panel messages
 │   ├── fonts.py                   # Unicode small caps sc() utility
-│   ├── formatters.py              # Progress bar, file size, status emoji
+│   ├── formatters.py              # Progress bar, file size, ETA, status emoji
 │   ├── validators.py              # File type, size, title sanitization
 │   ├── logger.py                  # Rotating file + console logger
 │   └── i18n.py                    # Multi-language support (en/ml)
@@ -108,7 +110,7 @@ GramUploader/
 ### 4. Environment Variables
 
 ```bash
-cp .env.example .env
+cp core/env.example .env
 nano .env
 ```
 
@@ -263,17 +265,17 @@ Set all env vars in Railway dashboard → Variables.
 | `/connect` | Link YouTube channel via Google OAuth |
 | `/disconnect` | Unlink your YouTube account |
 | `/manage` | YouTube Studio panel |
-| `/history` | Recent upload history (paginated) |
-| `/quota` | Today's upload usage |
+| `/history` | Recent upload history (paginated, with dates) |
+| `/quota` | Today's upload usage + reset countdown |
 | `/queue` | Check current upload queue size |
-| `/settings` | Preferences: privacy, language, auto-title |
+| `/settings` | Preferences — shows linked channel name |
 | `/cancel` | Cancel active FSM input (works anywhere) |
 
 ### Admin Commands
 
 | Command | Description |
 |---------|-------------|
-| `/stats` | Bot statistics + admin panel |
+| `/stats` | Bot statistics + admin panel (includes live queue depth) |
 | `/ban <id>` | Ban a user |
 | `/unban <id>` | Unban a user |
 | `/user <id>` | View user details, ban/unban, change plan |
@@ -289,12 +291,19 @@ Set all env vars in Railway dashboard → Variables.
 
 ```
 /start
-  └── Connect YouTube → Google OAuth2
+  └── Connect YouTube → Google OAuth2 → ✅ Telegram notification sent
         └── Send video
               └── Confirmation screen
                     ├── ✏️ Edit Title → send new title as message
                     ├── 🔒 Privacy → Public / Private / Unlisted
-                    └── Upload Now → Queue → Download → Upload → YouTube link
+                    └── Upload Now
+                          ├── 📥 Download:  [██████░░░░] 60%
+                          │   📤 Upload:    [░░░░░░░░░░]  0%
+                          │         ↓
+                          ├── 📥 Download:  [██████████] ✅
+                          │   📤 Upload:    [████████░░] 80%
+                          │         ↓
+                          └── 🖼 Thumbnail card + YouTube link + Manage button
 
 /disconnect → Unlinks YouTube account (token wiped from DB)
 ```
@@ -330,6 +339,9 @@ Text message received
 Document received
   ├── manage state == CAPTION_FILE? → .srt caption upload
   └── (no state)                    → normal video upload flow
+
+Photo received
+  └── manage state == THUMBNAIL?    → set video thumbnail
 ```
 
 All command and callback query handlers are registered before `fsm_router`, so they always take priority.
@@ -344,6 +356,7 @@ All command and callback query handlers are registered before `fsm_router`, so t
 - OAuth token auto-refreshed on next use
 - In-memory queue — bot restart marks pending uploads as failed (use Redis for production)
 - Render free tier: bot sleeps after 15 min inactivity, first wake-up is slow
+- YouTube thumbnail in done card may take a few seconds to appear after upload (YouTube processing)
 
 ---
 
@@ -389,4 +402,4 @@ refactor: move progress bar to formatters
 
 See [docs/CHANGELOG.md](docs/CHANGELOG.md) for full version history.
 
-Latest: **v2.6.0** · [v2.5.0] · [v2.4.0] · [v2.3.0] · [v2.2.0] · [v2.1.0] · [v2.0.0] · [v1.0.0]
+Latest: **v2.7.0** · [v2.6.0] · [v2.5.0] · [v2.4.0] · [v2.3.0] · [v2.2.0] · [v2.1.0] · [v2.0.0] · [v1.0.0]
