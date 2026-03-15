@@ -62,9 +62,36 @@ Format: `[vX.Y.Z] — YYYY-MM-DD`
 - **Help text updated** — `/disconnect` and `/queue` added to the command list in
   `Messages.help_text()`.
 
+- **YouTube Shorts thumbnail prepend** (`services/video_processor.py` — new file) —
+  when a Short is uploaded with a thumbnail, the bot uses ffmpeg to prepend a 2-second
+  still image clip of the thumbnail to the video before uploading. YouTube picks the
+  first frame as the Short's thumbnail. Flow:
+  1. User taps `🖼 Add Thumbnail` on the confirmation screen (shown only for Shorts).
+  2. Bot enters thumbnail-wait FSM (`_pending_thumb` dict).
+  3. User sends a photo → bot downloads it, stores path in `_pending["thumb_path"]`.
+  4. Confirmation screen updates: `🖼 Thumbnail: ✅ Set`.
+  5. On confirm: `video_processor.prepend_thumbnail()` runs ffmpeg to create a 2s clip
+     from the thumbnail image (matched to original video dimensions via `ffprobe`) and
+     concatenates it before the original video using the concat demuxer.
+  6. Combined video is uploaded to YouTube; all temp files cleaned in `finally` blocks.
+  Safe margin: prepend is skipped if `duration > 178s` so total never exceeds 180s.
+  Falls back to original video if ffmpeg fails — upload proceeds without thumbnail.
+
+- **`_pending_thumb` FSM** (`handlers/video.py`, `handlers/fsm_router.py`) — new
+  per-user dict tracking whether the bot is waiting for a thumbnail photo. `/cancel`
+  clears the FSM and restores the confirmation screen. Discard cleans up the downloaded
+  thumbnail file.
+
+- **`🖼 Add Thumbnail` button** (`utils/keyboards.py`) — shown in `upload_confirm`
+  keyboard only when `is_short=True`. Button label toggles: `🖼 Add Thumbnail` /
+  `🖼 Thumbnail: ✅ Set`. `Keyboards.upload_confirm()` gains optional `has_thumb: bool`
+  parameter.
+
 ### Fixed
 
-- **`admin_user_info()` `AttributeError` on `user.plan`** — after `use_enum_values: True`
+- **Shorts detection threshold was 60s instead of 180s** — `is_short` in `video.py`
+  and the `📱 Shorts eligible` hint in `messages.py` both used `<= 60`. YouTube raised
+  the Shorts maximum to **3 minutes (180s)** in October 2024. Both corrected to `<= 180`.
   was added in v2.6.0, `user.plan` is a plain string. Calling `.value` on it crashed.
   Fixed with `user.plan if isinstance(user.plan, str) else user.plan.value`.
 
@@ -80,10 +107,11 @@ Format: `[vX.Y.Z] — YYYY-MM-DD`
 
 ### Changed
 
-- **`Messages.upload_confirm()`** — optional `duration: int = None` and
-  `is_short: bool = False` params added.
-- **`Keyboards.upload_confirm()`** — optional `is_short: bool = False` param added;
-  renders the Shorts toggle button with current state.
+- **`Messages.upload_confirm()`** — optional `duration: int = None`, `is_short: bool = False`,
+  and `has_thumb: bool = False` params added.
+- **`Keyboards.upload_confirm()`** — optional `is_short: bool = False` and
+  `has_thumb: bool = False` params added; thumbnail button row appears only for Shorts.
+- **`services/video_processor.py`** — new file; `prepend_thumbnail()` async function.
 - **`Messages.settings_text()`** — optional `channel_name: str = None` param added.
 - **`Messages.admin_stats()`** — optional `queue_size: int = 0` param added.
 - **`Messages.upload_done()`** — optional `privacy: str = "public"` param added.
