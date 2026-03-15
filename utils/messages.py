@@ -6,7 +6,6 @@ Use Messages.xxx() everywhere instead of hardcoding strings.
 from datetime import datetime, timezone, timedelta
 from utils.formatters import make_progress_bar, format_size
 from config import Config
-from utils.fonts import sc
 
 
 # UPGRADE #10: file type → emoji map
@@ -48,8 +47,8 @@ class Messages:
                 "Tap <b>Connect YouTube</b> below to get started."
             )
         return (
-            f"{sc('hey')}, {mention}\n"
-            f"{sc('welcome to gramuploader!')}\n\n"
+            f"Hey, {mention}\n"
+            f"Welcome to GramUploader!\n\n"
             f"Upload your Telegram videos directly\n"
             f"to YouTube — fast, simple, private.\n"
             f"━━━━━━━━━━━━━━━━━━━━━\n\n"
