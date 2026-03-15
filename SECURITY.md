@@ -2,20 +2,42 @@
 
 ## Supported Versions
 
-Use this section to tell people about which versions of your project are
-currently being supported with security updates.
-
-| Version | Supported          |
-| ------- | ------------------ |
-| 5.1.x   | :white_check_mark: |
-| 5.0.x   | :x:                |
-| 4.0.x   | :white_check_mark: |
-| < 4.0   | :x:                |
+| Version | Supported |
+| ------- | --------- |
+| 2.6.x   | ✅        |
+| < 2.6   | ❌        |
 
 ## Reporting a Vulnerability
 
-Use this section to tell people how to report a vulnerability.
+If you discover a security vulnerability in GramUploader, please **do not open a public issue**.
 
-Tell them where to go, how often they can expect to get an update on a
-reported vulnerability, what to expect if the vulnerability is accepted or
-declined, etc.
+Report privately via Telegram: [@adnanxpkd](https://t.me/adnanxpkd)
+
+### What to include
+
+- Description of the vulnerability
+- Steps to reproduce
+- Potential impact
+- Your suggested fix (optional)
+
+### What to expect
+
+- Acknowledgement within **48 hours**
+- Status update within **7 days**
+- Fix released within **14 days** for confirmed vulnerabilities
+
+### Scope
+
+The following are in scope:
+
+- Authentication bypass or token leakage (OAuth2 / YouTube tokens)
+- Unauthorized access to another user's data or uploads
+- Bot command injection or privilege escalation
+- MongoDB injection via user input
+- Denial of service via the upload queue
+
+The following are **out of scope**:
+
+- Rate limiting bypass for non-destructive actions
+- Issues in third-party dependencies (report upstream)
+- Self-XSS in the OAuth callback page
