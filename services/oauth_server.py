@@ -71,11 +71,24 @@ async def callback(request: Request):
 
         token_data = await asyncio.to_thread(_exchange)
 
+        # FIX: Google only returns refresh_token on first consent.
+        # On re-connect we must preserve the existing token if the new one is empty.
+        from database.db import user_repo as _user_repo
+        existing_token = await _user_repo.get_youtube_token(telegram_id)
+        existing_refresh = existing_token.refresh_token if existing_token else ""
+
+        new_refresh = token_data.get("refresh_token") or existing_refresh
+
+        from datetime import datetime, timezone, timedelta
+        expires_in = token_data.get("expires_in", 3600)
+        token_expiry = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
+
         token = YouTubeToken(
             access_token=token_data.get("access_token", ""),
-            refresh_token=token_data.get("refresh_token", ""),
+            refresh_token=new_refresh,
             client_id=Config.GOOGLE_CLIENT_ID,
             client_secret=Config.GOOGLE_CLIENT_SECRET,
+            token_expiry=token_expiry,
         )
 
         # Run DB calls on the main event loop (Motor requires its own loop)

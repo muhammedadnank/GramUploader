@@ -22,6 +22,7 @@ class YouTubeToken(BaseModel):
     refresh_token: str
     client_id: str
     client_secret: str
+    token_expiry: Optional[datetime] = None
 
 
 class User(BaseModel):

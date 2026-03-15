@@ -424,20 +424,20 @@ def register(app: Client):
         video_id = cq.matches[0].group(1)
         video = await get_video_details(cq.from_user.id, video_id)
         stats = video.get("statistics", {})
-        try:
-            await cq.message.edit_text(
+        await _safe_edit(
+            cq.message,
+            text=(
                 f"📊 <b>Video Statistics</b>\n\n"
                 f"👁 Views: <b>{format_count(stats.get('viewCount', 0))}</b>\n"
                 f"👍 Likes: <b>{format_count(stats.get('likeCount', 0))}</b>\n"
                 f"💬 Comments: <b>{format_count(stats.get('commentCount', 0))}</b>\n"
-                f"⭐ Favorites: <b>{format_count(stats.get('favoriteCount', 0))}</b>",
-                reply_markup=InlineKeyboardMarkup([[
-                    InlineKeyboardButton("« Back", callback_data=f"mgr_video:{video_id}")
-                ]]),
-                parse_mode=enums.ParseMode.HTML
-            )
-        except MessageNotModified:
-            pass
+                f"⭐ Favorites: <b>{format_count(stats.get('favoriteCount', 0))}</b>"
+            ),
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("« Back", callback_data=f"mgr_video:{video_id}")
+            ]]),
+            parse_mode=enums.ParseMode.HTML
+        )
 
     # ─── DELETE ─────────────────────────────────────────────────
 

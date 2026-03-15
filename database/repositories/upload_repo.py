@@ -42,7 +42,7 @@ class UploadRepository:
     async def get_stuck_jobs(self) -> list[dict]:
         """Return uploads stuck in PENDING or DOWNLOADING (e.g. after a crash)."""
         cursor = self.col.find({
-            "status": {"$in": [UploadStatus.PENDING.value, UploadStatus.DOWNLOADING.value]}
+            "status": {"$in": [UploadStatus.PENDING.value, UploadStatus.DOWNLOADING.value, UploadStatus.UPLOADING.value]}
         })
         return await cursor.to_list(length=None)
 

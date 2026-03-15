@@ -17,10 +17,15 @@ def is_rate_limited(telegram_id: int) -> bool:
     now = time.time()
     history = _rate_data[telegram_id]
     # Remove old entries
-    _rate_data[telegram_id] = [t for t in history if now - t < RATE_WINDOW]
-    if len(_rate_data[telegram_id]) >= RATE_LIMIT:
+    cleaned = [t for t in history if now - t < RATE_WINDOW]
+    if len(cleaned) >= RATE_LIMIT:
+        _rate_data[telegram_id] = cleaned  # keep for accurate window
         return True
-    _rate_data[telegram_id].append(now)
+    cleaned.append(now)
+    _rate_data[telegram_id] = cleaned
+    # FIX: evict key when list becomes empty to prevent unbounded memory growth
+    if not _rate_data[telegram_id]:
+        del _rate_data[telegram_id]
     return False
 
 
@@ -55,6 +60,29 @@ async def apply_middlewares(client: Client, message: Message) -> bool:
     if is_rate_limited(user_id):
         await message.reply("⏳ Too many requests. Please slow down.")
         log.info(f"Rate limited user {user_id}")
+        return False
+
+    return True
+
+async def apply_cb_middlewares(client, cq) -> bool:
+    """
+    Lightweight middleware for CallbackQueryHandlers.
+    Checks maintenance mode and ban status.
+    Returns False if the callback should be blocked.
+    """
+    user_id = cq.from_user.id if cq.from_user else None
+    if not user_id:
+        return False
+
+    # 1. Maintenance mode (skip for admins)
+    if Config.MAINTENANCE_MODE and user_id not in Config.ADMIN_IDS:
+        await cq.answer("🔧 Bot is under maintenance. Please try later.", show_alert=True)
+        return False
+
+    # 2. Ban check
+    user = await user_repo.find(user_id)
+    if user and user.is_banned:
+        await cq.answer("🚫 You are banned from using this bot.", show_alert=True)
         return False
 
     return True

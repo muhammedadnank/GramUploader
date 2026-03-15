@@ -28,18 +28,20 @@ async def get_credentials(telegram_id: int) -> Credentials | None:
         token_uri="https://oauth2.googleapis.com/token",
         client_id=token.client_id,
         client_secret=token.client_secret,
-        scopes=SCOPES
+        scopes=SCOPES,
+        expiry=token.token_expiry,  # FIX: pass expiry so creds.expired works correctly
     )
 
-    # Auto-refresh if expired
-    if creds.expired and creds.refresh_token:
+    # Auto-refresh if expired or no expiry info stored
+    if (creds.expired or token.token_expiry is None) and creds.refresh_token:
         await asyncio.to_thread(creds.refresh, Request())
-        # Save refreshed token back to DB
+        # Save refreshed token (including new expiry) back to DB
         await user_repo.set_youtube_token(telegram_id, YouTubeToken(
             access_token=creds.token,
-            refresh_token=creds.refresh_token,
+            refresh_token=creds.refresh_token or token.refresh_token,
             client_id=token.client_id,
             client_secret=token.client_secret,
+            token_expiry=creds.expiry,
         ))
         log.info(f"Token refreshed for user {telegram_id}")
 
@@ -120,10 +122,5 @@ async def upload_to_youtube(
         if e.resp.status == 403:
             raise Exception("YouTube quota exceeded. Try again tomorrow or ask admin to add a new API key.")
         raise Exception(f"YouTube upload failed: {e.reason}")
-    finally:
-        # Always cleanup temp file
-        try:
-            if os.path.exists(file_path):
-                os.remove(file_path)
-        except Exception as cleanup_err:
-            log.warning(f"Could not delete temp file {file_path}: {cleanup_err}")
+    # NOTE: temp file cleanup is handled by queue_worker's finally block
+    # Do not delete here — queue_worker owns both file_path and processed_path

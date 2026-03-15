@@ -57,14 +57,17 @@ async def prepend_thumbnail(video_path: str, thumb_path: str, duration: int) -> 
         log.warning(f"prepend_thumbnail: ffprobe failed ({e}), using default scale")
         scale_filter = "scale=1080:1920"
 
-    # Temp files
-    fd_clip, clip_path = tempfile.mkstemp(suffix="_thumb_clip.mp4")
-    os.close(fd_clip)
+    # FIX: create out_path before try so finally can always clean it up.
+    # clip_path is created inside try so if ffprobe returns early, no orphan file.
     fd_out, out_path = tempfile.mkstemp(suffix="_with_thumb.mp4")
     os.close(fd_out)
+    clip_path = None  # set inside try after creation
 
     try:
         # Step 1: image → THUMB_DURATION-second video clip
+        fd_clip, clip_path = tempfile.mkstemp(suffix="_thumb_clip.mp4")
+        os.close(fd_clip)
+        # (clip_path cleanup is in finally block below)
         cmd_clip = [
             "ffmpeg", "-y",
             "-loop", "1",
@@ -84,6 +87,12 @@ async def prepend_thumbnail(video_path: str, thumb_path: str, duration: int) -> 
         _, stderr1 = await proc1.communicate()
         if proc1.returncode != 0:
             log.warning(f"prepend_thumbnail: thumb clip creation failed: {stderr1.decode()[-300:]}")
+            # Clean up the empty out_path before returning
+            try:
+                if os.path.exists(out_path):
+                    os.remove(out_path)
+            except Exception:
+                pass
             return video_path
 
         # Step 2: concat thumb_clip + original video
@@ -111,6 +120,11 @@ async def prepend_thumbnail(video_path: str, thumb_path: str, duration: int) -> 
 
         if proc2.returncode != 0:
             log.warning(f"prepend_thumbnail: concat failed: {stderr2.decode()[-300:]}")
+            try:
+                if os.path.exists(out_path):
+                    os.remove(out_path)
+            except Exception:
+                pass
             return video_path
 
         log.info(f"prepend_thumbnail: success → {out_path} (original {duration}s + {THUMB_DURATION}s thumb)")
@@ -120,9 +134,9 @@ async def prepend_thumbnail(video_path: str, thumb_path: str, duration: int) -> 
         log.error(f"prepend_thumbnail: unexpected error: {e}")
         return video_path
     finally:
-        # Always clean up the intermediate thumb clip
+        # Clean up intermediate thumb clip (clip_path is None if never created)
         try:
-            if os.path.exists(clip_path):
+            if clip_path and os.path.exists(clip_path):
                 os.remove(clip_path)
         except Exception:
             pass

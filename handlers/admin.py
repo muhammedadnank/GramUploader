@@ -138,7 +138,7 @@ def register(app: Client):
             total_uploads = await upload_repo.count_by_user(target_id)
             await message.reply(
                 Messages.admin_user_info(user, uploads_today, total_uploads),
-                reply_markup=Keyboards.admin_user(target_id, user.is_banned, user.plan.value),
+                reply_markup=Keyboards.admin_user(target_id, user.is_banned, user.plan),
                 parse_mode=enums.ParseMode.HTML
             )
         except ValueError:

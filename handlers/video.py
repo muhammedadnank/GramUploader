@@ -6,7 +6,7 @@ from pyrogram.types import Message, CallbackQuery
 from database.db import user_repo, upload_repo
 from database.models import Upload, UploadStatus
 from services.queue_worker import enqueue, queue_size
-from core.middlewares import apply_middlewares
+from core.middlewares import apply_middlewares, apply_cb_middlewares
 from utils.messages import Messages
 from utils.keyboards import Keyboards
 from utils.validators import is_within_size_limit, sanitize_title
@@ -144,6 +144,8 @@ def register(app: Client):
 
     @app.on_callback_query(filters.regex(r"^upload_confirm:(.+)$"))
     async def cb_upload_confirm(client: Client, cq: CallbackQuery):
+        if not await apply_cb_middlewares(client, cq):
+            return
         await cq.answer()  # FIX #4
         pending_key = cq.matches[0].group(1)
         data = _pending.pop(pending_key, None)
@@ -229,6 +231,10 @@ def register(app: Client):
         pending_key = cq.matches[0].group(2)
         if pending_key not in _pending:
             await cq.answer("Session expired.", show_alert=True)
+            return
+        # FIX: Shorts must be public — YouTube rejects private/unlisted Shorts
+        if _pending[pending_key].get("is_short") and privacy != "public":
+            await cq.answer("📱 Shorts must be Public on YouTube.", show_alert=True)
             return
         _pending[pending_key]["privacy"] = privacy
         data = _pending[pending_key]
