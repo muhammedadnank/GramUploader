@@ -101,7 +101,10 @@ def register(app: Client):
     async def cb_list(client: Client, cq: CallbackQuery):
         await cq.answer()  # FIX #4
         token = cq.matches[0].group(1) or None
-        await cq.message.edit_text("⏳ Loading...")
+        try:
+            await cq.message.edit_text("⏳ Loading...")
+        except MessageNotModified:
+            pass
         try:
             data = await get_my_videos(cq.from_user.id, page_token=token)
             videos = data["items"]
@@ -128,23 +131,30 @@ def register(app: Client):
         video_id = cq.matches[0].group(1)
         # Clear any active FSM state when returning to video panel
         clear_state(cq.from_user.id)
-        await cq.message.edit_text("⏳ Loading video details...")
+        try:
+            await cq.message.edit_text("⏳ Loading video details...")
+        except MessageNotModified:
+            pass
         try:
             video = await get_video_details(cq.from_user.id, video_id)
-            await cq.message.edit_text(
-                ManagerMessages.video_panel(video),
+            await _safe_edit(
+                cq.message,
+                text=ManagerMessages.video_panel(video),
                 reply_markup=ManagerKeyboards.video_panel(video_id),
                 parse_mode=enums.ParseMode.HTML
             )
         except Exception as e:
-            await cq.message.edit_text(f"❌ {e}")
+            await _safe_edit(cq.message, text=f"❌ {e}")
 
     # ─── CHANNEL STATS ──────────────────────────────────────────
 
     @app.on_callback_query(filters.regex("^mgr_channel_stats$"))
     async def cb_channel_stats(client: Client, cq: CallbackQuery):
         await cq.answer()  # FIX #4
-        await cq.message.edit_text("⏳ Fetching channel stats...")
+        try:
+            await cq.message.edit_text("⏳ Fetching channel stats...")
+        except MessageNotModified:
+            pass
         try:
             channel = await get_channel_stats(cq.from_user.id)
             await cq.message.edit_text(
@@ -274,7 +284,10 @@ def register(app: Client):
     async def cb_playlist(client: Client, cq: CallbackQuery):
         await cq.answer()  # FIX #4
         video_id = cq.matches[0].group(1)
-        await cq.message.edit_text("⏳ Fetching playlists...")
+        try:
+            await cq.message.edit_text("⏳ Fetching playlists...")
+        except MessageNotModified:
+            pass
         try:
             playlists = await get_my_playlists(cq.from_user.id)
             if not playlists:
@@ -325,7 +338,10 @@ def register(app: Client):
     async def cb_captions(client: Client, cq: CallbackQuery):
         await cq.answer()  # FIX #4
         video_id = cq.matches[0].group(1)
-        await cq.message.edit_text("⏳ Fetching captions...")
+        try:
+            await cq.message.edit_text("⏳ Fetching captions...")
+        except MessageNotModified:
+            pass
         try:
             captions = await get_captions(cq.from_user.id, video_id)
             count = len(captions)
