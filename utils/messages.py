@@ -131,7 +131,8 @@ class Messages:
     @staticmethod
     def upload_confirm(title: str, size: int, privacy: str = "public",
                        file_type: str = "", quota_warning: bool = False,
-                       duration: int = None, is_short: bool = False) -> str:
+                       duration: int = None, is_short: bool = False,
+                       has_thumb: bool = False) -> str:
         # UPGRADE #5: duration line
         # UPGRADE #10: file type emoji
         privacy_emoji = {"public": "🌍", "private": "🔒", "unlisted": "🔗"}.get(privacy, "🌍")
@@ -148,13 +149,14 @@ class Messages:
             m, s = divmod(int(duration), 60)
             h, m = divmod(m, 60)
             dur_str = f"{h}:{m:02d}:{s:02d}" if h else f"{m}:{s:02d}"
-            shorts_hint = " 📱 <i>Shorts eligible</i>" if int(duration) <= 60 else ""
+            shorts_hint = " 📱 <i>Shorts eligible</i>" if int(duration) <= 180 else ""
             dur_line = f"⏱ Duration: <code>{dur_str}</code>{shorts_hint}\n"
 
         # Shorts status line
         shorts_line = ""
         if is_short:
-            shorts_line = "📱 <b>YouTube Short</b> — will upload as Short (<code>#Shorts</code> added, privacy forced Public)\n"
+            thumb_status = "🖼 <b>Thumbnail set</b> — will be prepended as first 2s\n" if has_thumb else ""
+            shorts_line = f"📱 <b>YouTube Short</b> — will upload as Short (<code>#Shorts</code> added, privacy forced Public)\n{thumb_status}"
 
         quota_line = "\n⚠️ <b>Last free upload today!</b> Upgrade for unlimited." if quota_warning else ""
         return (
