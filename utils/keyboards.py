@@ -78,9 +78,11 @@ class Keyboards:
     # ─── UPLOAD CONFIRM ─────────────────────────────────────────
 
     @staticmethod
-    def upload_confirm(upload_id: str, is_short: bool = False) -> InlineKeyboardMarkup:
+    def upload_confirm(upload_id: str, is_short: bool = False,
+                       has_thumb: bool = False) -> InlineKeyboardMarkup:
         shorts_label = "📱 Short: ✅ ON" if is_short else "📱 Short: OFF"
-        return InlineKeyboardMarkup([
+        thumb_label = "🖼 Thumbnail: ✅ Set" if has_thumb else "🖼 Add Thumbnail"
+        rows = [
             [
                 InlineKeyboardButton("✅ Upload Now", callback_data=f"upload_confirm:{upload_id}"),
                 InlineKeyboardButton("🗑 Discard", callback_data=f"upload_cancel:{upload_id}"),
@@ -92,7 +94,13 @@ class Keyboards:
             [
                 InlineKeyboardButton(shorts_label, callback_data=f"upload_toggle_shorts:{upload_id}"),
             ],
-        ])
+        ]
+        # Show thumbnail button only for Shorts
+        if is_short:
+            rows.append([
+                InlineKeyboardButton(thumb_label, callback_data=f"upload_add_thumb:{upload_id}"),
+            ])
+        return InlineKeyboardMarkup(rows)
 
     @staticmethod
     def privacy_select(upload_id: str) -> InlineKeyboardMarkup:
