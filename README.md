@@ -14,6 +14,7 @@ Upload Telegram videos directly to YouTube — with a YouTube Studio-like manage
 - **Settings panel** — shows connected YouTube channel name, default privacy, language, auto-title
 - **Admin panel** — stats (with live queue depth), broadcast, ban, API key management
 - **Multi-language** — English & Malayalam (i18n ready)
+- **Security** — rate limiting, ban system, maintenance mode, OAuth token auto-refresh with expiry tracking
 
 ## Tech Stack
 
@@ -39,17 +40,22 @@ GramUploader/
 ├── setup_local.sh                 # Local Linux setup script
 ├── run.sh                         # Local quick-start script
 │
+├── .github/
+│   ├── dependabot.yml             # Daily dependency update checks
+│   └── workflows/
+│       └── security-scan.yml      # pip-audit + Safety dependency scan
+│
 ├── core/
 │   ├── bot.py                     # Pyrogram client singleton
 │   ├── filters.py                 # Custom filters (is_admin, is_youtube_connected)
-│   └── middlewares.py             # Rate limit, ban check, auto user upsert
+│   └── middlewares.py             # Rate limit, ban check, auto user upsert, apply_cb_middlewares()
 │
 ├── database/
 │   ├── db.py                      # MongoDB connection + repo instances + ensure_indexes()
-│   ├── models.py                  # Pydantic models (User, Upload, APIKey) — use_enum_values
+│   ├── models.py                  # Pydantic models (User, Upload, APIKey, YouTubeToken with expiry)
 │   └── repositories/
 │       ├── user_repo.py           # User CRUD + iter_all_ids() + clear_youtube_token()
-│       ├── upload_repo.py         # Upload CRUD + stuck-job query
+│       ├── upload_repo.py         # Upload CRUD + stuck-job query (PENDING/DOWNLOADING/UPLOADING)
 │       └── apikey_repo.py         # API key rotation
 │
 ├── handlers/
@@ -62,7 +68,7 @@ GramUploader/
 │
 ├── services/
 │   ├── queue_worker.py            # Background upload queue processor + thumbnail done card
-│   ├── youtube_uploader.py        # Resumable YouTube upload + token refresh
+│   ├── youtube_uploader.py        # Resumable YouTube upload + token refresh with expiry
 │   ├── youtube_manager.py         # YouTube Studio API (edit/delete/captions/playlists)
 │   ├── oauth_server.py            # FastAPI Google OAuth2 callback server + Telegram notify
 │   └── video_processor.py         # ffmpeg thumbnail prepend for Shorts
@@ -74,9 +80,8 @@ GramUploader/
 │   │   ├── __init__.py
 │   │   ├── keyboards.py           # /manage panel keyboards
 │   │   └── messages.py            # /manage panel messages
-│   ├── fonts.py                   # Unicode small caps sc() utility
 │   ├── formatters.py              # Progress bar, file size, ETA, status emoji
-│   ├── validators.py              # File type, size, title sanitization
+│   ├── validators.py              # File type, size, title sanitization (strips control chars)
 │   ├── logger.py                  # Rotating file + console logger
 │   └── i18n.py                    # Multi-language support (en/ml)
 │
@@ -84,8 +89,10 @@ GramUploader/
 │   ├── en.json                    # English strings
 │   └── ml.json                    # Malayalam strings
 │
-└── docs/
-    └── CHANGELOG.md               # Full version history
+├── docs/
+│   └── CHANGELOG.md               # Full version history
+│
+└── SECURITY.md                    # Vulnerability reporting policy
 ```
 
 ---
@@ -358,10 +365,16 @@ All command and callback query handlers are registered before `fsm_router`, so t
 - YouTube Data API free quota: ~6 uploads/day per key (add more keys via `/addkey`)
 - Telegram MTProto file size: up to 2GB (4GB with Telegram Premium)
 - Cards, End Screens, Audio replacement — not available via YouTube Data API
-- OAuth token auto-refreshed on next use
+- OAuth token auto-refreshed on next use (expiry tracked in DB since v2.7.0)
 - In-memory queue — bot restart marks pending uploads as failed (use Redis for production)
 - Render free tier: bot sleeps after 15 min inactivity, first wake-up is slow
 - YouTube thumbnail in done card may take a few seconds to appear after upload (YouTube processing)
+
+---
+
+## Security
+
+See [SECURITY.md](SECURITY.md) for the vulnerability reporting policy.
 
 ---
 
