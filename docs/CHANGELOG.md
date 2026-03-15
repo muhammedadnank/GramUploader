@@ -23,99 +23,114 @@ Format: `[vX.Y.Z] — YYYY-MM-DD`
 - **Video duration on confirmation screen** (`handlers/video.py`, `utils/messages.py`) —
   `message.video.duration` is captured and shown as `⏱ Duration: 2:34`. Stored in
   `_pending` and carried through privacy-change and back-navigation re-renders.
-  Not available for documents (Telegram doesn't expose duration for those).
 
-- **Shorts eligibility hint** — if `duration ≤ 60s`, the duration line appends
-  `📱 Shorts eligible`. Informational only — no automatic `#Shorts` tag added.
+- **Shorts eligibility hint** — if `duration ≤ 180s`, the duration line appends
+  `📱 Shorts eligible`.
 
 - **YouTube Shorts toggle on confirmation screen** (`handlers/video.py`,
-  `utils/keyboards.py`, `utils/messages.py`) — a `📱 Short: ON/OFF` toggle button
-  is shown on every upload confirmation screen. For videos ≤ 60s the toggle defaults
-  to **ON**; for longer videos it defaults to **OFF**. User can flip it at any time
-  before confirming. When ON:
-  - `#Shorts` is appended to the title (trimmed to 100 chars).
-  - Privacy is forced to `public` (YouTube Shorts do not work as private/unlisted).
-  - The confirmation screen shows a note: *"will upload as Short (#Shorts added,
-    privacy forced Public)"*.
-  When the toggle is flipped ON → OFF, the `#Shorts` append and privacy override
-  are simply not applied — no further state change. The toggle state is stored in
-  `_pending[key]["is_short"]` and carried through all confirm screen re-renders
-  (title edit, privacy change, back navigation). New callback: `upload_toggle_shorts:<key>`.
+  `utils/keyboards.py`, `utils/messages.py`) — `📱 Short: ON/OFF` toggle button
+  on every upload confirmation screen. When ON: `#Shorts` appended to title, privacy
+  forced public. New callback: `upload_toggle_shorts:<key>`.
 
-- **File type emoji on confirmation screen** (`_FILE_TYPE_EMOJI` dict in `messages.py`) —
-  `🎬` mp4/mov · `📦` mkv · `🌐` webm · `📼` avi/wmv/flv/mpeg · `📱` 3gp · `🎞` unknown.
+- **Shorts privacy enforcement** — `cb_set_privacy` now blocks non-public selections
+  for Shorts and replies with an alert instead of silently overriding at confirm.
 
-- **Upload history dates** (`Messages.history_page()`) — each entry now shows the upload
-  date as `· 14 Mar` in italic, pulled from `Upload.created_at`.
+- **File type emoji on confirmation screen** — `🎬` mp4/mov · `📦` mkv · `🌐` webm ·
+  `📼` avi/wmv/flv/mpeg · `📱` 3gp · `🎞` unknown.
 
-- **Quota reset countdown** (`Messages.quota_text()`) — shows `🕐 Resets in 3h 42m`
-  computed live from `datetime.now(timezone.utc)` to midnight UTC, replacing the static hint.
+- **Upload history dates** — each entry shows upload date as `· 14 Mar` in italic.
 
-- **Connected YouTube channel name in Settings** (`_send_settings()` in `start.py`,
-  `Messages.settings_text()`) — shows `📺 Channel: <name>` when connected, fetched via
-  `get_channel_stats()`. Silently omitted if the call fails.
+- **Quota reset countdown** — shows `🕐 Resets in 3h 42m` computed live from UTC midnight.
 
-- **Live queue depth in Admin Stats** (`_fetch_stats()` in `admin.py`,
-  `Messages.admin_stats()`) — shows `⏳ Queue: N pending` when the queue is non-empty.
-  Hidden when queue is 0 to keep the panel clean.
+- **Connected YouTube channel name in Settings** — shows `📺 Channel: <n>` when connected.
 
-- **Help text updated** — `/disconnect` and `/queue` added to the command list in
-  `Messages.help_text()`.
+- **Live queue depth in Admin Stats** — shows `⏳ Queue: N pending` when non-empty.
 
-- **YouTube Shorts thumbnail prepend** (`services/video_processor.py` — new file) —
-  when a Short is uploaded with a thumbnail, the bot uses ffmpeg to prepend a 2-second
-  still image clip of the thumbnail to the video before uploading. YouTube picks the
-  first frame as the Short's thumbnail. Flow:
-  1. User taps `🖼 Add Thumbnail` on the confirmation screen (shown only for Shorts).
-  2. Bot enters thumbnail-wait FSM (`_pending_thumb` dict).
-  3. User sends a photo → bot downloads it, stores path in `_pending["thumb_path"]`.
-  4. Confirmation screen updates: `🖼 Thumbnail: ✅ Set`.
-  5. On confirm: `video_processor.prepend_thumbnail()` runs ffmpeg to create a 2s clip
-     from the thumbnail image (matched to original video dimensions via `ffprobe`) and
-     concatenates it before the original video using the concat demuxer.
-  6. Combined video is uploaded to YouTube; all temp files cleaned in `finally` blocks.
-  Safe margin: prepend is skipped if `duration > 178s` so total never exceeds 180s.
-  Falls back to original video if ffmpeg fails — upload proceeds without thumbnail.
+- **YouTube Shorts thumbnail prepend** (`services/video_processor.py`) — ffmpeg prepends
+  a 2-second still of the user's thumbnail photo before the Short. Safe margin: skipped
+  if `duration > 178s`. Falls back to original video on ffmpeg failure.
 
-- **`_pending_thumb` FSM** (`handlers/video.py`, `handlers/fsm_router.py`) — new
-  per-user dict tracking whether the bot is waiting for a thumbnail photo. `/cancel`
-  clears the FSM and restores the confirmation screen. Discard cleans up the downloaded
-  thumbnail file.
+- **`apply_cb_middlewares()`** (`core/middlewares.py`) — lightweight ban + maintenance
+  check for `CallbackQueryHandler`s. Previously all callbacks bypassed middleware entirely;
+  now `cb_upload_confirm` and `cb_back_start` are protected.
 
-- **`🖼 Add Thumbnail` button** (`utils/keyboards.py`) — shown in `upload_confirm`
-  keyboard only when `is_short=True`. Button label toggles: `🖼 Add Thumbnail` /
-  `🖼 Thumbnail: ✅ Set`. `Keyboards.upload_confirm()` gains optional `has_thumb: bool`
-  parameter.
+- **`SECURITY.md`** — vulnerability reporting policy, scope, and contact.
+
+- **`.github/dependabot.yml`** — daily dependency update checks for pip packages and
+  GitHub Actions. `kurigram` minor/major updates ignored (manual upgrade required).
+
+- **`.github/workflows/security-scan.yml`** — `pip-audit` + Safety dependency scan
+  on push, PR, and daily schedule. Report saved as workflow artifact.
+
+- **Token expiry tracking** — `YouTubeToken` model gains `token_expiry: Optional[datetime]`
+  field. OAuth callback now saves expiry from `expires_in`. Uploader passes `expiry=` to
+  `Credentials()` so `creds.expired` works correctly; also force-refreshes when
+  `token_expiry is None` (existing users on first run after upgrade).
 
 ### Fixed
 
-- **Shorts detection threshold was 60s instead of 180s** — `is_short` in `video.py`
-  and the `📱 Shorts eligible` hint in `messages.py` both used `<= 60`. YouTube raised
-  the Shorts maximum to **3 minutes (180s)** in October 2024. Both corrected to `<= 180`.
-  was added in v2.6.0, `user.plan` is a plain string. Calling `.value` on it crashed.
-  Fixed with `user.plan if isinstance(user.plan, str) else user.plan.value`.
+- **`user.plan.value` crash in `/user` command** (`handlers/admin.py`) — `User` model has
+  `use_enum_values=True`, so `user.plan` is already a plain string. Calling `.value` on it
+  raised `AttributeError`. Changed to `user.plan`.
 
-- **Start screen identical for connected/disconnected users** — connected users saw the same
-  "Tap Connect below" text as new users. Screen now branches: connected → "Just send me a
-  video!"; disconnected → connect call-to-action.
+- **OAuth token refresh never triggered** (`services/youtube_uploader.py`) — `Credentials`
+  was built without an `expiry=` parameter, so `creds.expired` was always `False`. Tokens
+  expired silently after ~1 hour causing 401 errors on all API calls.
 
-- **`ValueError: Unknown format code 'd' for object of type 'float'`** —
-  `message.video.duration` from Telegram is a `float` (e.g. `102.5`). Passing it
-  directly to `divmod()` produced float quotients; `f"{m:02d}"` then crashed because
-  `:d` format only accepts integers. Fixed by casting to `int` before `divmod`:
-  `divmod(int(duration), 60)`.
+- **Refresh token overwritten on re-connect** (`services/oauth_server.py`) — Google only
+  returns `refresh_token` on first consent. Re-connecting without revoking first would
+  overwrite the valid stored token with an empty string. Now preserves the existing token
+  when the new response omits it.
+
+- **`UPLOADING` jobs not recovered on restart** (`database/repositories/upload_repo.py`) —
+  `get_stuck_jobs()` only recovered `PENDING` and `DOWNLOADING` statuses. Jobs that crashed
+  mid-upload were stuck in `UPLOADING` forever. Added `UPLOADING` to the recovery filter.
+
+- **`cb_stats` `MessageNotModified` crash** (`handlers/manage.py`) — the stats callback
+  was the only one in manage.py not wrapped with `_safe_edit()`. Fixed.
+
+- **All `"⏳ Loading..."` edit_text calls unguarded** (`handlers/manage.py`) — five callbacks
+  (`cb_video_panel`, `cb_list`, `cb_channel_stats`, `cb_playlist`, `cb_captions`) used bare
+  `edit_text()` for the loading state. Double-tap raised `MessageNotModified`. All wrapped
+  in `try/except MessageNotModified`.
+
+- **Double temp file deletion** (`services/youtube_uploader.py`) — the uploader's `finally`
+  block deleted `file_path` independently; `queue_worker` also deleted it. Removed the
+  duplicate `finally` from the uploader — cleanup is owned solely by `queue_worker`.
+
+- **`clip_path` tempfile leak in video_processor** (`services/video_processor.py`) —
+  `mkstemp` for the intermediate thumbnail clip was called before the `try` block. On
+  early-return paths (ffprobe failure), the file was created but never cleaned up. Moved
+  `mkstemp` inside the `try` block; `finally` now guards with `if clip_path`.
+
+- **`out_path` orphaned on ffmpeg failure** (`services/video_processor.py`) — when the
+  ffmpeg clip or concat step failed and returned early, the empty `out_path` tempfile was
+  left on disk. Added cleanup before each early return.
+
+- **`_rate_data` dict grows forever** (`core/middlewares.py`) — per-user timestamp lists
+  were cleaned on each request but the key was never evicted. After cleanup, empty keys
+  are now deleted.
+
+- **Small caps Unicode removed from all messages** (`utils/messages.py`) — `sc()` and
+  `fonts.py` were used for welcome and progress text. Removed in favour of plain text for
+  consistent rendering across Telegram clients (Android, iOS, Desktop).
+
+- **Circular import regression in keyboards + manage/messages** — a previous commit
+  re-introduced `from handlers.video import _pending, _pending_edit, _pending_thumb` into
+  `utils/keyboards.py` and `utils/manage/messages.py`. These are unused in both files
+  and cause a circular import crash on startup. Removed again.
+
+- **`sanitize_title()` didn't strip control characters** (`utils/validators.py`) —
+  YouTube rejects titles containing `\n`, `\r`, `\t`, and other ASCII control chars
+  (`\x00–\x1f`). Now stripped via `re.sub(r'[\x00-\x1f]', ' ', title)` before the
+  existing forbidden-char removal.
+
+- **`/diconnect` typo in help text** — corrected to `/disconnect`.
 
 ### Changed
 
-- **`Messages.upload_confirm()`** — optional `duration: int = None`, `is_short: bool = False`,
-  and `has_thumb: bool = False` params added.
-- **`Keyboards.upload_confirm()`** — optional `is_short: bool = False` and
-  `has_thumb: bool = False` params added; thumbnail button row appears only for Shorts.
-- **`services/video_processor.py`** — new file; `prepend_thumbnail()` async function.
-- **`Messages.settings_text()`** — optional `channel_name: str = None` param added.
-- **`Messages.admin_stats()`** — optional `queue_size: int = 0` param added.
-- **`Messages.upload_done()`** — optional `privacy: str = "public"` param added.
 - **Version** bumped to `2.7.0` in `config.py`.
+- `utils/fonts.py` — `sc()` no longer imported or used; file is dead code (safe to delete).
 
 ---
 
@@ -205,15 +220,12 @@ Format: `[vX.Y.Z] — YYYY-MM-DD`
 - **Gemini AI integration removed** — `google-generativeai` and all AI metadata generation
   features have been removed to reduce dependencies and eliminate the external API dependency
   on Gemini.
-  - `services/ai_service.py` — deleted entirely (`generate_metadata()`, `regenerate_title()`)
-  - `handlers/ai.py` — deleted entirely (`/ai` command, `cb_metadata_start`, `cb_ai_suggest`,
-    `cb_ai_apply_yt`, `cb_regen_title`, AI FSM state management)
+  - `services/ai_service.py` — deleted entirely
+  - `handlers/ai.py` — deleted entirely
   - `handlers/__init__.py` — `ai` import and `ai.register(app)` removed
   - `handlers/fsm_router.py` — `STATE_WAIT_HINT` AI FSM branch removed
   - `handlers/start.py` — `cb_ai_menu` callback handler removed
-  - `utils/keyboards.py` — `🤖 AI Tools` button removed from start menu;
-    `upload_confirm()` simplified — `ai_applied` param, `✨ AI Suggest`, and `🔄 Regen Title`
-    buttons removed
+  - `utils/keyboards.py` — `🤖 AI Tools` button removed from start menu
   - `config.py` — `GEMINI_API_KEY` env var removed
   - `requirements.txt` — `google-generativeai` removed
 
@@ -225,19 +237,14 @@ Format: `[vX.Y.Z] — YYYY-MM-DD`
 
 - **Whisper AI captions removed** — `openai-whisper` depended on PyTorch (~2.5 GB install),
   making Render builds fail (2 GB disk limit exceeded) and causing OOM crashes on any instance
-  with less than 512 MB free RAM. The feature has been removed entirely until a lighter
-  alternative (e.g. `faster-whisper`) is integrated.
-  - `services/ai_service.py` — `generate_captions()`, `_format_srt_time()`, `_segments_to_srt()` removed
+  with less than 512 MB free RAM.
+  - `services/ai_service.py` — `generate_captions()` and helpers removed
   - `handlers/ai.py` — `STATE_WAIT_VIDEO`, `cb_caption_start` handler removed
   - `handlers/fsm_router.py` — Whisper document FSM branch removed
   - `config.py` — `WHISPER_MODEL` env var removed
-  - `render.yaml` — `WHISPER_MODEL` env var removed; `apt-get install ffmpeg` removed from buildCommand
   - `requirements.txt` — `openai-whisper`, `ffmpeg-python` removed
-  - `requirements-whisper.txt` — deleted
-  - `handlers/start.py` — "🎙 AI Captions (Whisper)" button removed from `/ai` menu
 
-- Manual `.srt` caption upload via `/manage → 📝 Captions` is **not affected** — that feature
-  uploads user-provided subtitle files directly to YouTube and has no dependency on Whisper.
+- Manual `.srt` caption upload via `/manage → 📝 Captions` is **not affected**.
 
 ---
 
@@ -245,76 +252,32 @@ Format: `[vX.Y.Z] — YYYY-MM-DD`
 
 ### Critical Bug Fixes
 
-- **FSM handler conflict** — `manage.py`, `ai.py`, and `video.py` were each registering their own
-  `filters.text & filters.private` and `filters.document & filters.private` handlers. Pyrogram fires
-  the first matching handler and ignores the rest, so AI FSM (`STATE_WAIT_HINT`) and Whisper caption
-  input (`STATE_WAIT_VIDEO`) were silently unreachable. Fixed by extracting all FSM text/photo/document
-  routing into a new `handlers/fsm_router.py` that is registered last, after all command and callback
-  handlers. Priority order: upload title edit → AI FSM → manage FSM → video upload fallback.
+- **FSM handler conflict** — `manage.py`, `ai.py`, and `video.py` each registered their own
+  `filters.text` and `filters.document` handlers. Fixed by extracting all FSM routing into
+  `handlers/fsm_router.py` registered last.
 
-- **Broadcast sent hardcoded string** — `/broadcast` replied to admin's message correctly but the
-  callback always sent `"📢 Announcement from bot admin."` instead of forwarding the actual replied
-  message. Fixed: `_broadcast_msg` dict stores the replied `Message` object per admin; the confirm
-  callback calls `source_msg.forward(uid)` for each user.
+- **Broadcast sent hardcoded string** — `/broadcast` always sent a fixed string instead of
+  forwarding the replied message. Fixed: `_broadcast_msg` stores the replied `Message` object.
 
-- **Blocking `flow.fetch_token()` in async OAuth route** — `fetch_token()` is a synchronous network
-  call (200–2000ms) that was awaited directly inside a FastAPI async route, blocking the entire uvicorn
-  event loop for the duration of the Google token exchange. Fixed with
+- **Blocking `flow.fetch_token()` in async OAuth route** — fixed with
   `await asyncio.to_thread(flow.fetch_token, code=code)`.
 
-- **Document handler race between manage FSM and video upload** — `manage.py` registered a
-  `filters.document` handler for `.srt` caption uploads; `video.py` registered another for video
-  uploads. A document sent while in `STATE_CAPTION_FILE` could be routed to the wrong handler.
-  Resolved by the central `fsm_router.py` which checks FSM state before deciding whether to treat
-  a document as a caption file or a regular video upload.
+- **Document handler race between manage FSM and video upload** — resolved by central
+  `fsm_router.py`.
 
 ### Bug Fixes
 
-- **`upload_edit_title` button had no handler** — the keyboard button with
-  `callback_data="upload_edit_title:<key>"` existed but no `on_callback_query` handler matched it;
-  clicking silently did nothing. Handler added in `video.py`; title edit state tracked via
-  `_pending_edit` dict and resolved in `fsm_router.py`.
-
-- **`admin_keys` and `admin_broadcast` buttons had no handlers** — both buttons in the admin panel
-  keyboard had `callback_data` values with no matching handlers. Added `cb_admin_keys` (lists all
-  API keys with usage) and `cb_admin_broadcast` (usage instructions) in `admin.py`.
-
-- **`set_status()` mutable default argument** — `async def set_status(..., extra: dict = {})` used a
-  mutable default argument, a classic Python bug where a mutated dict persists across calls.
-  Fixed: `extra: dict = None`, then `extra = extra or {}` inside the function.
-
-- **`increment_usage()` KeyError on missing `_id`** — `apikey_repo.get_active()` returns a raw MongoDB
-  dict; if `_id` was somehow absent, `api_key_doc["_id"]` raised `KeyError`. Added
-  `if key_id is None: return` guard in `increment_usage()`.
-
-- **Schedule FSM gave no format feedback** — invalid datetime input raised `ValueError` caught by the
-  outer `except Exception`, giving users a cryptic `❌ Error: ...` message. Now catches `ValueError`
-  specifically and replies with the correct format and an example.
+- `upload_edit_title` button had no handler — handler added in `video.py`.
+- `admin_keys` and `admin_broadcast` buttons had no handlers — added in `admin.py`.
+- `set_status()` mutable default argument — fixed `extra: dict = None`.
+- `increment_usage()` KeyError on missing `_id` — `None` guard added.
+- Schedule FSM gave no format feedback — specific `ValueError` catch with format hint.
 
 ### Improvements
 
-- **`_pending` TTL** — upload confirmation entries in the in-memory `_pending` dict never expired,
-  causing a slow memory leak under heavy use. Each entry now stores a `_ts` timestamp; a
-  `_cleanup_pending()` call on every new upload removes entries older than 10 minutes.
-
-- **Startup stuck-job recovery** — on restart, uploads with status `PENDING` or `DOWNLOADING` (left
-  over from a crash) are now automatically marked `FAILED` with a clear message
-  `"Bot restarted during upload. Please resend the video."` so users are not left waiting indefinitely.
-
-- **Startup config validation** — `main.py` now logs a warning if `ADMIN_IDS` is empty (no admin
-  access possible), `BOT_TOKEN` is missing (exits early), or Google OAuth credentials are unset.
-
-### Structure
-
-- `handlers/fsm_router.py` — new file; sole handler for `filters.text`, `filters.photo`,
-  and `filters.document` in private chats
-- `handlers/manage.py` — FSM text/photo/document handlers removed; only command + callback handlers remain
-- `handlers/ai.py` — FSM text/video handlers removed; only command + callback handlers remain
-- `handlers/video.py` — `handle_video_upload()` extracted as a standalone async function callable
-  from `fsm_router`; `_pending_edit` dict added for upload title edit FSM
-- `handlers/__init__.py` — `fsm_router.register(app)` added as the last registration step
-- `database/repositories/upload_repo.py` — `get_stuck_jobs()` method added for startup recovery
-- `database/repositories/apikey_repo.py` — `None` guard in `increment_usage()`
+- **`_pending` TTL** — entries expire after 10 minutes via `_cleanup_pending()`.
+- **Startup stuck-job recovery** — `PENDING`/`DOWNLOADING` jobs marked `FAILED` on restart.
+- **Startup config validation** — warnings for missing `ADMIN_IDS`, `BOT_TOKEN`, Google creds.
 
 ---
 
@@ -322,34 +285,23 @@ Format: `[vX.Y.Z] — YYYY-MM-DD`
 
 ### Bug Fixes
 
-- **`handlers/start.py`** — `cb_manage_open` and `cb_ai_menu` callbacks were accidentally defined outside `register()` due to indentation error; fixed
-- **`services/youtube_uploader.py`** — removed calls to non-existent DB functions (`get_youtube_token`, `save_youtube_token`, `get_active_api_key`, `increment_key_usage`); replaced with correct `user_repo.get_youtube_token()` / `user_repo.set_youtube_token()` / `apikey_repo.get_active()` / `apikey_repo.increment_usage()`
-- **`services/youtube_uploader.py`** — token refresh (`creds.refresh()`) was not awaited; fixed with `asyncio.to_thread`
-- **`services/oauth_server.py`** — removed calls to non-existent `save_youtube_token` and `upsert_user`; replaced with `user_repo.set_youtube_token()` and `user_repo.upsert()`
-- **`services/oauth_server.py`** — added `refresh_token or ""` guard for first-time OAuth (token may be None)
+- `handlers/start.py` — callbacks accidentally defined outside `register()` due to indentation error.
+- `services/youtube_uploader.py` — removed calls to non-existent DB functions; token refresh not awaited.
+- `services/oauth_server.py` — removed calls to non-existent functions; `refresh_token` None guard added.
 
 ### Structure
 
-- `services/yt_manager.py` → renamed to `services/youtube_manager.py` (consistent with `youtube_uploader.py`)
+- `services/yt_manager.py` → renamed to `services/youtube_manager.py`
 - `utils/manager_keyboards.py` → moved to `utils/manage/keyboards.py`
 - `utils/manager_messages.py` → moved to `utils/manage/messages.py`
-- `utils/manage/__init__.py` created
-- `handlers/video_handler.py` (old v1 leftover) deleted
-- All imports updated to reflect new paths
 
 ### Render Deploy Support
 
-- `render.yaml` added — auto-detected by Render on connect
-- `Procfile` fixed — was `cmd1 & cmd2` (broken); now `web: python main.py`
-- `config.py` — `OAUTH_SERVER_PORT` now reads `$PORT` env var first (required by Render)
-- `Dockerfile` — added `ffmpeg`, `g++`, `python3-dev`; created `/app/logs` dir
-- `requirements.txt` — added `psutil` for RAM check
+- `render.yaml`, `Procfile`, `Dockerfile` updates; `$PORT` env var support.
 
 ### Local Deploy Support
 
-- `setup_local.sh` added — installs `ffmpeg`, creates `venv`, validates `.env`, creates `downloads/` and `logs/` dirs
-- `run.sh` added — activates `venv` and starts bot
-- `utils/logger.py` — log file path changed from relative `bot.log` to absolute `logs/bot.log` inside project root
+- `setup_local.sh`, `run.sh` added.
 
 ---
 
@@ -357,34 +309,13 @@ Format: `[vX.Y.Z] — YYYY-MM-DD`
 
 ### YouTube Studio Panel (`/manage`)
 
-- New `/manage` command — full video management directly from Telegram
-- Edit title, description, tags, category (15 categories), privacy
-- Set custom thumbnail by sending a photo
-- Upload `.srt` caption files / delete existing caption tracks
-- Add videos to existing or new playlists
-- Advanced settings: made-for-kids toggle, embeddable toggle, license (Standard / CC), scheduled publish
-- Channel stats panel (subscribers, total views, video count)
-- Per-video stats (views, likes, comments, favorites)
-- Delete video with confirmation screen
-- Paginated video list (8 per page, next/prev navigation)
-
-### AI Features (`/ai`)
-
-- New `/ai` command with Gemini 1.5 Flash (free tier)
-- AI metadata generation: title (≤70 chars), description (150–300 chars), tags (up to 8)
-- `✨ AI Suggest` button on upload confirmation screen — auto-fills title/desc/tags
-- `🔄 Regen Title` button — regenerate title only
-- Language-aware generation (English / Malayalam)
+- Edit title, description, tags, category, privacy, thumbnail, captions, playlists,
+  advanced settings (kids/embed/license/schedule), stats, delete with confirmation.
 
 ### Other Changes
 
-- `utils/fonts.py` — `sc()` utility converts regular text to Unicode small caps
-- `/start` message redesigned with small caps styling and cleaner layout
-- `🤖 AI Tools` button added to `/start` menu
-- `🎬 Manage Videos` button added to `/start` menu
-- Azure Container Instances deploy: `Dockerfile` + `deploy.sh`
-- `.gitignore` added — protects `.env`, `*.session`, `downloads/`, `logs/`
-- `.dockerignore` added
+- Azure Container Instances deploy: `Dockerfile` + `deploy.sh`.
+- `.gitignore`, `.dockerignore` added.
 
 ---
 
@@ -392,20 +323,7 @@ Format: `[vX.Y.Z] — YYYY-MM-DD`
 
 ### Initial Release
 
-- Telegram → YouTube video upload with live download + upload progress bars
-- Upload confirmation screen — set title, change privacy, cancel before uploading
-- In-memory queue worker — sequential upload processing
-- Google OAuth2 connect flow via FastAPI callback server
-- MongoDB Atlas with Motor async driver
-- Repository pattern — `UserRepository`, `UploadRepository`, `APIKeyRepository`
-- Pydantic models — `User`, `Upload`, `APIKey`, `YouTubeToken`
-- Free / Premium plan with configurable daily upload limits (`FREE_UPLOADS_PER_DAY`)
-- YouTube API key rotation — auto-switches when daily quota (~8000 units) exceeded
-- Admin panel: `/stats`, `/ban`, `/unban`, `/addkey`, `/broadcast`
-- `/history` — paginated upload history (5 per page)
-- `/quota` — today's upload count with progress bar
-- `/settings` — default privacy, language, auto-title from caption
-- Rate limiter — 5 requests per 10 seconds per user
-- Maintenance mode toggle (admin only)
-- Multi-language support: English & Malayalam via JSON locales (`locales/en.json`, `locales/ml.json`)
-- Rotating file logger — `logs/bot.log` (5MB × 3 backups)
+- Telegram → YouTube video upload with live progress bars.
+- Upload confirmation screen, in-memory queue worker, Google OAuth2, MongoDB Atlas.
+- Repository pattern, Pydantic models, Free/Premium plan, API key rotation.
+- Admin panel, history, quota, settings, rate limiter, maintenance mode, multi-language.
