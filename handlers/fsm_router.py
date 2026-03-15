@@ -47,10 +47,13 @@ def register(app: Client):
                 from utils.messages import Messages
                 from utils.keyboards import Keyboards
                 data = _pending[pending_key]
+                is_short = data.get("is_short", False)
                 await message.reply(
                     Messages.upload_confirm(data["title"], data["size"], data["privacy"],
-                                            file_type=data.get("file_type", "")),
-                    reply_markup=Keyboards.upload_confirm(pending_key),
+                                            file_type=data.get("file_type", ""),
+                                            duration=data.get("duration"),
+                                            is_short=is_short),
+                    reply_markup=Keyboards.upload_confirm(pending_key, is_short=is_short),
                     parse_mode=enums.ParseMode.HTML
                 )
             else:
