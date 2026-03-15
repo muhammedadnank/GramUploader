@@ -34,7 +34,28 @@ def register(app: Client):
         text = message.text.strip()
 
         # ── 1. Upload title edit ────────────────────────────────────────────
-        from handlers.video import _pending, _pending_edit
+        from handlers.video import _pending, _pending_edit, _pending_thumb
+
+        # /cancel while waiting for thumbnail photo
+        if user_id in _pending_thumb and text == "/cancel":
+            pending_key = _pending_thumb.pop(user_id)
+            data = _pending.get(pending_key)
+            if data:
+                is_short = data.get("is_short", False)
+                has_thumb = bool(data.get("thumb_path"))
+                from utils.messages import Messages
+                from utils.keyboards import Keyboards
+                await message.reply(
+                    Messages.upload_confirm(data["title"], data["size"], data["privacy"],
+                                            file_type=data.get("file_type", ""),
+                                            duration=data.get("duration"),
+                                            is_short=is_short, has_thumb=has_thumb),
+                    reply_markup=Keyboards.upload_confirm(pending_key, is_short=is_short, has_thumb=has_thumb),
+                    parse_mode=enums.ParseMode.HTML
+                )
+            else:
+                await message.reply("❌ Cancelled.")
+            return
         if user_id in _pending_edit:
             # FIX #13: always pop the edit state, regardless of whether pending_key is still alive
             pending_key = _pending_edit.pop(user_id)
@@ -48,12 +69,13 @@ def register(app: Client):
                 from utils.keyboards import Keyboards
                 data = _pending[pending_key]
                 is_short = data.get("is_short", False)
+                has_thumb = bool(data.get("thumb_path"))
                 await message.reply(
                     Messages.upload_confirm(data["title"], data["size"], data["privacy"],
                                             file_type=data.get("file_type", ""),
                                             duration=data.get("duration"),
-                                            is_short=is_short),
-                    reply_markup=Keyboards.upload_confirm(pending_key, is_short=is_short),
+                                            is_short=is_short, has_thumb=has_thumb),
+                    reply_markup=Keyboards.upload_confirm(pending_key, is_short=is_short, has_thumb=has_thumb),
                     parse_mode=enums.ParseMode.HTML
                 )
             else:
@@ -149,6 +171,32 @@ def register(app: Client):
     @app.on_message(filters.photo & filters.private)
     async def fsm_photo_router(client: Client, message: Message):
         user_id = message.from_user.id
+
+        # ── 1. Short thumbnail wait ─────────────────────────────────────────
+        from handlers.video import _pending, _pending_thumb
+        if user_id in _pending_thumb:
+            pending_key = _pending_thumb.pop(user_id)
+            if pending_key not in _pending:
+                await message.reply("⚠️ Session expired. Please resend the video.")
+                return
+            # Download thumbnail photo
+            thumb_path = await message.download()
+            _pending[pending_key]["thumb_path"] = thumb_path
+            data = _pending[pending_key]
+            is_short = data.get("is_short", False)
+            from utils.messages import Messages
+            from utils.keyboards import Keyboards
+            await message.reply(
+                Messages.upload_confirm(data["title"], data["size"], data["privacy"],
+                                        file_type=data.get("file_type", ""),
+                                        duration=data.get("duration"),
+                                        is_short=is_short, has_thumb=True),
+                reply_markup=Keyboards.upload_confirm(pending_key, is_short=is_short, has_thumb=True),
+                parse_mode=enums.ParseMode.HTML
+            )
+            return
+
+        # ── 2. Manage FSM: set video thumbnail ──────────────────────────────
         from handlers.manage import get_state, clear_state, STATE_THUMBNAIL
         state_data = get_state(user_id)
         if not state_data or state_data.get("state") != STATE_THUMBNAIL:
