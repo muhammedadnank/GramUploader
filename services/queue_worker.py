@@ -113,6 +113,29 @@ async def process_job(app: Client, job: dict):
 
     file_path = await msg.download(progress=download_progress)
 
+    # ── Short thumbnail prepend (ffmpeg) ────────────────────────────────────
+    thumb_path = job.get("thumb_path")
+    duration = job.get("duration")
+    is_short = job.get("is_short", False)
+    processed_path = file_path  # default: no processing
+
+    if is_short and thumb_path and duration:
+        try:
+            await status_msg.edit_text(
+                "🖼 <b>Prepending thumbnail...</b>\n\nAdding 2s thumbnail clip to the start of your Short.",
+                parse_mode=enums.ParseMode.HTML
+            )
+        except Exception:
+            pass
+        from services.video_processor import prepend_thumbnail
+        processed_path = await prepend_thumbnail(file_path, thumb_path, int(duration))
+        # Clean up thumb photo after use
+        try:
+            if thumb_path and os.path.exists(thumb_path):
+                os.remove(thumb_path)
+        except Exception as e:
+            log.warning(f"Could not delete thumb_path {thumb_path}: {e}")
+
     await upload_repo.update(upload_id, {
         "status": UploadStatus.UPLOADING.value,
         "progress_download": 100
@@ -149,7 +172,7 @@ async def process_job(app: Client, job: dict):
     try:
         video_id = await upload_to_youtube(
             telegram_id=telegram_id,
-            file_path=file_path,
+            file_path=processed_path,
             title=title,
             description=description,
             tags=tags,
@@ -157,12 +180,13 @@ async def process_job(app: Client, job: dict):
             progress_callback=upload_progress
         )
     finally:
-        # FIX #2: always clean up the downloaded temp file
-        try:
-            if file_path and os.path.exists(file_path):
-                os.remove(file_path)
-        except Exception as cleanup_err:
-            log.warning(f"Could not delete temp file {file_path}: {cleanup_err}")
+        # FIX #2: always clean up temp files
+        for path in set([file_path, processed_path]):
+            try:
+                if path and os.path.exists(path):
+                    os.remove(path)
+            except Exception as cleanup_err:
+                log.warning(f"Could not delete temp file {path}: {cleanup_err}")
 
     youtube_url = f"https://youtube.com/watch?v={video_id}"
     await upload_repo.update(upload_id, {
