@@ -5,7 +5,7 @@ Upload Telegram videos directly to YouTube — with a YouTube Studio-like manage
 ## Features
 
 - **Upload** videos from Telegram to YouTube with dual-stage live progress (download + upload bars side-by-side)
-- **YouTube Shorts support** — duration ≤ 60s auto-detected; toggle on confirmation screen to upload as Short (`#Shorts` appended, privacy forced public)
+- **YouTube Shorts support** — videos ≤ 3 min (180s) auto-detected; toggle on confirmation screen to upload as Short (`#Shorts` appended, privacy forced public); send a thumbnail photo to have it prepended as the first 2 seconds via ffmpeg
 - **Rich confirmation screen** — title, size, duration, file type, privacy, Shorts toggle before upload
 - **Upload done card** — YouTube thumbnail photo sent automatically on completion
 - **Manage** existing YouTube videos (edit, delete, thumbnail, captions, playlists)
@@ -64,7 +64,8 @@ GramUploader/
 │   ├── queue_worker.py            # Background upload queue processor + thumbnail done card
 │   ├── youtube_uploader.py        # Resumable YouTube upload + token refresh
 │   ├── youtube_manager.py         # YouTube Studio API (edit/delete/captions/playlists)
-│   └── oauth_server.py            # FastAPI Google OAuth2 callback server + Telegram notify
+│   ├── oauth_server.py            # FastAPI Google OAuth2 callback server + Telegram notify
+│   └── video_processor.py         # ffmpeg thumbnail prepend for Shorts
 │
 ├── utils/
 │   ├── messages.py                # All bot message templates (dual progress, quota countdown, channel name)
@@ -297,8 +298,9 @@ Set all env vars in Railway dashboard → Variables.
               └── Confirmation screen
                     ├── ✏️ Edit Title → send new title as message
                     ├── 🔒 Privacy → Public / Private / Unlisted
-                    ├── 📱 Short: ON/OFF → auto-ON if ≤60s
+                    ├── 📱 Short: ON/OFF → auto-ON if ≤180s
                     │         ON: appends #Shorts to title, forces Public privacy
+                    ├── 🖼 Add Thumbnail → send photo → prepended as first 2s via ffmpeg
                     └── Upload Now
                           ├── 📥 Download:  [██████░░░░] 60%
                           │   📤 Upload:    [░░░░░░░░░░]  0%
