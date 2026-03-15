@@ -7,7 +7,6 @@ from datetime import datetime, timezone, timedelta
 from utils.formatters import make_progress_bar, format_size
 from config import Config
 from utils.fonts import sc
-from handlers.video import _pending, _pending_edit, _pending_thumb
 
 
 # UPGRADE #10: file type → emoji map
