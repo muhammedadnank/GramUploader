@@ -5,7 +5,8 @@ Upload Telegram videos directly to YouTube — with a YouTube Studio-like manage
 ## Features
 
 - **Upload** videos from Telegram to YouTube with dual-stage live progress (download + upload bars side-by-side)
-- **Rich confirmation screen** — title, size, duration, file type, privacy, Shorts detection before upload
+- **YouTube Shorts support** — duration ≤ 60s auto-detected; toggle on confirmation screen to upload as Short (`#Shorts` appended, privacy forced public)
+- **Rich confirmation screen** — title, size, duration, file type, privacy, Shorts toggle before upload
 - **Upload done card** — YouTube thumbnail photo sent automatically on completion
 - **Manage** existing YouTube videos (edit, delete, thumbnail, captions, playlists)
 - **Queue system** — multiple uploads handled sequentially with position indicator
@@ -296,6 +297,8 @@ Set all env vars in Railway dashboard → Variables.
               └── Confirmation screen
                     ├── ✏️ Edit Title → send new title as message
                     ├── 🔒 Privacy → Public / Private / Unlisted
+                    ├── 📱 Short: ON/OFF → auto-ON if ≤60s
+                    │         ON: appends #Shorts to title, forces Public privacy
                     └── Upload Now
                           ├── 📥 Download:  [██████░░░░] 60%
                           │   📤 Upload:    [░░░░░░░░░░]  0%
