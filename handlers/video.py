@@ -20,6 +20,9 @@ _pending: dict = {}
 # Per-user upload title edit FSM {user_id: pending_key}
 _pending_edit: dict = {}
 
+# Per-user Short thumbnail wait FSM {user_id: pending_key}
+_pending_thumb: dict = {}
+
 # TTL for pending confirmations (10 minutes)
 _PENDING_TTL = 600
 
@@ -52,7 +55,7 @@ async def handle_video_upload(client: Client, message: Message):
         return
 
     uploads_today = await user_repo.get_uploads_today(message.from_user.id)
-    plan = user.plan.value
+    plan = user.plan if isinstance(user.plan, str) else user.plan.value
     if plan == "free" and uploads_today >= Config.FREE_UPLOADS_PER_DAY:
         await message.reply(
             Messages.daily_limit(Config.FREE_UPLOADS_PER_DAY),
@@ -96,8 +99,8 @@ async def handle_video_upload(client: Client, message: Message):
     # UPGRADE #5: capture duration from message.video if available
     duration = getattr(message.video, "duration", None) if message.video else None
 
-    # Auto-detect Shorts: duration ≤ 60s → default ON
-    is_short = bool(duration and int(duration) <= 60)
+    # Auto-detect Shorts: duration ≤ 180s (YouTube Shorts max = 3 minutes since Oct 2024)
+    is_short = bool(duration and int(duration) <= 180)
 
     # Quota warning: is this the last free upload today?
     quota_warning = False
@@ -116,14 +119,15 @@ async def handle_video_upload(client: Client, message: Message):
         "file_type": file_type,
         "duration": duration,
         "is_short": is_short,
+        "thumb_path": None,   # set when user sends thumbnail photo
         "_ts": time.time(),
     }
 
     await message.reply(
         Messages.upload_confirm(title, media.file_size or 0, default_privacy,
                                 file_type=file_type, quota_warning=quota_warning,
-                                duration=duration, is_short=is_short),
-        reply_markup=Keyboards.upload_confirm(pending_key, is_short=is_short),
+                                duration=duration, is_short=is_short, has_thumb=False),
+        reply_markup=Keyboards.upload_confirm(pending_key, is_short=is_short, has_thumb=False),
         parse_mode=enums.ParseMode.HTML
     )
 
@@ -175,6 +179,9 @@ def register(app: Client):
             "chat_id": data["chat_id"],
             "title": title,
             "privacy": privacy,
+            "thumb_path": data.get("thumb_path"),
+            "duration": data.get("duration"),
+            "is_short": data.get("is_short", False),
         })
 
         try:
@@ -189,7 +196,17 @@ def register(app: Client):
     async def cb_upload_cancel(client: Client, cq: CallbackQuery):
         await cq.answer()  # FIX #4
         pending_key = cq.matches[0].group(1)
-        _pending.pop(pending_key, None)
+        data = _pending.pop(pending_key, None)
+        # Clean up thumb file if it was downloaded
+        if data and data.get("thumb_path"):
+            try:
+                import os
+                if os.path.exists(data["thumb_path"]):
+                    os.remove(data["thumb_path"])
+            except Exception:
+                pass
+        # Clear thumbnail FSM if user was in it
+        _pending_thumb.pop(cq.from_user.id, None)
         try:
             await cq.message.edit_text("❌ Upload cancelled.")
         except MessageNotModified:
@@ -216,13 +233,14 @@ def register(app: Client):
         _pending[pending_key]["privacy"] = privacy
         data = _pending[pending_key]
         is_short = data.get("is_short", False)
+        has_thumb = bool(data.get("thumb_path"))
         try:
             await cq.message.edit_text(
                 Messages.upload_confirm(data["title"], data["size"], privacy,
                                         file_type=data.get("file_type", ""),
                                         duration=data.get("duration"),
-                                        is_short=is_short),
-                reply_markup=Keyboards.upload_confirm(pending_key, is_short=is_short),
+                                        is_short=is_short, has_thumb=has_thumb),
+                reply_markup=Keyboards.upload_confirm(pending_key, is_short=is_short, has_thumb=has_thumb),
                 parse_mode=enums.ParseMode.HTML
             )
         except MessageNotModified:
@@ -238,13 +256,14 @@ def register(app: Client):
             await cq.answer("Session expired.", show_alert=True)
             return
         is_short = data.get("is_short", False)
+        has_thumb = bool(data.get("thumb_path"))
         try:
             await cq.message.edit_text(
                 Messages.upload_confirm(data["title"], data["size"], data["privacy"],
                                         file_type=data.get("file_type", ""),
                                         duration=data.get("duration"),
-                                        is_short=is_short),
-                reply_markup=Keyboards.upload_confirm(pending_key, is_short=is_short),
+                                        is_short=is_short, has_thumb=has_thumb),
+                reply_markup=Keyboards.upload_confirm(pending_key, is_short=is_short, has_thumb=has_thumb),
                 parse_mode=enums.ParseMode.HTML
             )
         except MessageNotModified:
@@ -264,14 +283,35 @@ def register(app: Client):
             _pending[pending_key]["privacy"] = "public"
         data = _pending[pending_key]
         is_short = data["is_short"]
+        has_thumb = bool(data.get("thumb_path"))
         await cq.answer("📱 Shorts ON" if is_short else "📱 Shorts OFF")
         try:
             await cq.message.edit_text(
                 Messages.upload_confirm(data["title"], data["size"], data["privacy"],
                                         file_type=data.get("file_type", ""),
                                         duration=data.get("duration"),
-                                        is_short=is_short),
-                reply_markup=Keyboards.upload_confirm(pending_key, is_short=is_short),
+                                        is_short=is_short, has_thumb=has_thumb),
+                reply_markup=Keyboards.upload_confirm(pending_key, is_short=is_short, has_thumb=has_thumb),
+                parse_mode=enums.ParseMode.HTML
+            )
+        except MessageNotModified:
+            pass
+
+    @app.on_callback_query(filters.regex(r"^upload_add_thumb:(.+)$"))
+    async def cb_upload_add_thumb(client: Client, cq: CallbackQuery):
+        pending_key = cq.matches[0].group(1)
+        if pending_key not in _pending:
+            await cq.answer("Session expired.", show_alert=True)
+            return
+        # Enter thumbnail wait FSM
+        _pending_thumb[cq.from_user.id] = pending_key
+        await cq.answer()
+        try:
+            await cq.message.edit_text(
+                "🖼 <b>Send Thumbnail</b>\n\n"
+                "Send a photo to use as the Short thumbnail.\n"
+                "It will be prepended as the first 2 seconds of the video.\n\n"
+                "Send /cancel to abort.",
                 parse_mode=enums.ParseMode.HTML
             )
         except MessageNotModified:
