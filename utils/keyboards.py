@@ -78,7 +78,8 @@ class Keyboards:
     # ─── UPLOAD CONFIRM ─────────────────────────────────────────
 
     @staticmethod
-    def upload_confirm(upload_id: str) -> InlineKeyboardMarkup:
+    def upload_confirm(upload_id: str, is_short: bool = False) -> InlineKeyboardMarkup:
+        shorts_label = "📱 Short: ✅ ON" if is_short else "📱 Short: OFF"
         return InlineKeyboardMarkup([
             [
                 InlineKeyboardButton("✅ Upload Now", callback_data=f"upload_confirm:{upload_id}"),
@@ -87,6 +88,9 @@ class Keyboards:
             [
                 InlineKeyboardButton("✏️ Edit Title", callback_data=f"upload_edit_title:{upload_id}"),
                 InlineKeyboardButton("🔒 Privacy", callback_data=f"upload_privacy:{upload_id}"),
+            ],
+            [
+                InlineKeyboardButton(shorts_label, callback_data=f"upload_toggle_shorts:{upload_id}"),
             ],
         ])
 
