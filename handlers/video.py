@@ -96,6 +96,9 @@ async def handle_video_upload(client: Client, message: Message):
     # UPGRADE #5: capture duration from message.video if available
     duration = getattr(message.video, "duration", None) if message.video else None
 
+    # Auto-detect Shorts: duration ≤ 60s → default ON
+    is_short = bool(duration and int(duration) <= 60)
+
     # Quota warning: is this the last free upload today?
     quota_warning = False
     if plan == "free":
@@ -112,14 +115,15 @@ async def handle_video_upload(client: Client, message: Message):
         "privacy": default_privacy,
         "file_type": file_type,
         "duration": duration,
+        "is_short": is_short,
         "_ts": time.time(),
     }
 
     await message.reply(
         Messages.upload_confirm(title, media.file_size or 0, default_privacy,
                                 file_type=file_type, quota_warning=quota_warning,
-                                duration=duration),
-        reply_markup=Keyboards.upload_confirm(pending_key),
+                                duration=duration, is_short=is_short),
+        reply_markup=Keyboards.upload_confirm(pending_key, is_short=is_short),
         parse_mode=enums.ParseMode.HTML
     )
 
@@ -145,10 +149,19 @@ def register(app: Client):
             await cq.message.delete()
             return
 
+        title = data["title"]
+        privacy = data["privacy"]
+
+        # Shorts: append #Shorts to title, force public privacy
+        if data.get("is_short"):
+            if "#Shorts" not in title:
+                title = (title + " #Shorts")[:100]
+            privacy = "public"  # Shorts don't work as private/unlisted
+
         upload = Upload(
             telegram_id=data["telegram_id"],
             file_id=data["file_id"],
-            title=data["title"],
+            title=title,
             size=data["size"],
         )
         upload_id = await upload_repo.create(upload)
@@ -160,13 +173,13 @@ def register(app: Client):
             "upload_id": upload_id,
             "message_id": data["message_id"],
             "chat_id": data["chat_id"],
-            "title": data["title"],
-            "privacy": data["privacy"],
+            "title": title,
+            "privacy": privacy,
         })
 
         try:
             await cq.message.edit_text(
-                Messages.upload_queued(data["title"], data["size"], position),
+                Messages.upload_queued(title, data["size"], position),
                 parse_mode=enums.ParseMode.HTML
             )
         except MessageNotModified:
@@ -202,12 +215,14 @@ def register(app: Client):
             return
         _pending[pending_key]["privacy"] = privacy
         data = _pending[pending_key]
+        is_short = data.get("is_short", False)
         try:
             await cq.message.edit_text(
                 Messages.upload_confirm(data["title"], data["size"], privacy,
                                         file_type=data.get("file_type", ""),
-                                        duration=data.get("duration")),
-                reply_markup=Keyboards.upload_confirm(pending_key),
+                                        duration=data.get("duration"),
+                                        is_short=is_short),
+                reply_markup=Keyboards.upload_confirm(pending_key, is_short=is_short),
                 parse_mode=enums.ParseMode.HTML
             )
         except MessageNotModified:
@@ -222,12 +237,41 @@ def register(app: Client):
         if not data:
             await cq.answer("Session expired.", show_alert=True)
             return
+        is_short = data.get("is_short", False)
         try:
             await cq.message.edit_text(
                 Messages.upload_confirm(data["title"], data["size"], data["privacy"],
                                         file_type=data.get("file_type", ""),
-                                        duration=data.get("duration")),
-                reply_markup=Keyboards.upload_confirm(pending_key),
+                                        duration=data.get("duration"),
+                                        is_short=is_short),
+                reply_markup=Keyboards.upload_confirm(pending_key, is_short=is_short),
+                parse_mode=enums.ParseMode.HTML
+            )
+        except MessageNotModified:
+            pass
+
+    @app.on_callback_query(filters.regex(r"^upload_toggle_shorts:(.+)$"))
+    async def cb_toggle_shorts(client: Client, cq: CallbackQuery):
+        pending_key = cq.matches[0].group(1)
+        if pending_key not in _pending:
+            await cq.answer("Session expired.", show_alert=True)
+            return
+        # Flip the toggle
+        current = _pending[pending_key].get("is_short", False)
+        _pending[pending_key]["is_short"] = not current
+        # If turning ON → force public (Shorts need public)
+        if not current:
+            _pending[pending_key]["privacy"] = "public"
+        data = _pending[pending_key]
+        is_short = data["is_short"]
+        await cq.answer("📱 Shorts ON" if is_short else "📱 Shorts OFF")
+        try:
+            await cq.message.edit_text(
+                Messages.upload_confirm(data["title"], data["size"], data["privacy"],
+                                        file_type=data.get("file_type", ""),
+                                        duration=data.get("duration"),
+                                        is_short=is_short),
+                reply_markup=Keyboards.upload_confirm(pending_key, is_short=is_short),
                 parse_mode=enums.ParseMode.HTML
             )
         except MessageNotModified:
