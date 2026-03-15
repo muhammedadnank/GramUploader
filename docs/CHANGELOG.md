@@ -28,6 +28,20 @@ Format: `[vX.Y.Z] — YYYY-MM-DD`
 - **Shorts eligibility hint** — if `duration ≤ 60s`, the duration line appends
   `📱 Shorts eligible`. Informational only — no automatic `#Shorts` tag added.
 
+- **YouTube Shorts toggle on confirmation screen** (`handlers/video.py`,
+  `utils/keyboards.py`, `utils/messages.py`) — a `📱 Short: ON/OFF` toggle button
+  is shown on every upload confirmation screen. For videos ≤ 60s the toggle defaults
+  to **ON**; for longer videos it defaults to **OFF**. User can flip it at any time
+  before confirming. When ON:
+  - `#Shorts` is appended to the title (trimmed to 100 chars).
+  - Privacy is forced to `public` (YouTube Shorts do not work as private/unlisted).
+  - The confirmation screen shows a note: *"will upload as Short (#Shorts added,
+    privacy forced Public)"*.
+  When the toggle is flipped ON → OFF, the `#Shorts` append and privacy override
+  are simply not applied — no further state change. The toggle state is stored in
+  `_pending[key]["is_short"]` and carried through all confirm screen re-renders
+  (title edit, privacy change, back navigation). New callback: `upload_toggle_shorts:<key>`.
+
 - **File type emoji on confirmation screen** (`_FILE_TYPE_EMOJI` dict in `messages.py`) —
   `🎬` mp4/mov · `📦` mkv · `🌐` webm · `📼` avi/wmv/flv/mpeg · `📱` 3gp · `🎞` unknown.
 
@@ -58,9 +72,18 @@ Format: `[vX.Y.Z] — YYYY-MM-DD`
   "Tap Connect below" text as new users. Screen now branches: connected → "Just send me a
   video!"; disconnected → connect call-to-action.
 
+- **`ValueError: Unknown format code 'd' for object of type 'float'`** —
+  `message.video.duration` from Telegram is a `float` (e.g. `102.5`). Passing it
+  directly to `divmod()` produced float quotients; `f"{m:02d}"` then crashed because
+  `:d` format only accepts integers. Fixed by casting to `int` before `divmod`:
+  `divmod(int(duration), 60)`.
+
 ### Changed
 
-- **`Messages.upload_confirm()`** — optional `duration: int = None` param added.
+- **`Messages.upload_confirm()`** — optional `duration: int = None` and
+  `is_short: bool = False` params added.
+- **`Keyboards.upload_confirm()`** — optional `is_short: bool = False` param added;
+  renders the Shorts toggle button with current state.
 - **`Messages.settings_text()`** — optional `channel_name: str = None` param added.
 - **`Messages.admin_stats()`** — optional `queue_size: int = 0` param added.
 - **`Messages.upload_done()`** — optional `privacy: str = "public"` param added.
