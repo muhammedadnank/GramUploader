@@ -13,7 +13,6 @@ from utils.validators import is_within_size_limit, sanitize_title
 from utils.formatters import format_size
 from utils.logger import log
 from config import Config
-from handlers.video import _pending, _pending_edit, _pending_thumb
 
 # Temp store for pending confirmations {pending_key: {data..., _ts: float}}
 _pending: dict = {}
