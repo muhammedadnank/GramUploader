@@ -98,12 +98,12 @@ async def callback(request: Request):
             await user_repo.upsert(telegram_id, {"youtube_connected": True})
 
         if _main_loop and _main_loop.is_running():
-            # Schedule DB save on the main loop — run in executor so we don't
-            # block the FastAPI/uvicorn event loop waiting for the result
+            # Schedule DB save on the main bot loop and block the current
+            # thread until it completes — do NOT use run_in_executor here,
+            # as that would attach the future to uvicorn's loop and cause
+            # "Future attached to a different loop" errors.
             future = asyncio.run_coroutine_threadsafe(_save(), _main_loop)
-            await asyncio.get_event_loop().run_in_executor(
-                None, lambda: future.result(timeout=10)
-            )
+            future.result(timeout=10)  # blocks uvicorn worker thread, not the loop
         else:
             await _save()
 
