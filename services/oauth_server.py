@@ -54,7 +54,7 @@ async def callback(request: Request):
         return HTMLResponse("<h2>❌ Invalid state parameter.</h2>")
 
     try:
-        # Token exchange — blocking, safe in thread
+        # Token exchange — blocking HTTP call, safe in thread
         def _exchange():
             resp = _requests.post(
                 "https://oauth2.googleapis.com/token",
@@ -71,43 +71,41 @@ async def callback(request: Request):
 
         token_data = await asyncio.to_thread(_exchange)
 
-        # FIX: Google only returns refresh_token on first consent.
-        # On re-connect we must preserve the existing token if the new one is empty.
-        from database.db import user_repo as _user_repo
-        existing_token = await _user_repo.get_youtube_token(telegram_id)
-        existing_refresh = existing_token.refresh_token if existing_token else ""
-
-        new_refresh = token_data.get("refresh_token") or existing_refresh
-
         from datetime import datetime, timezone, timedelta
         expires_in = token_data.get("expires_in", 3600)
         token_expiry = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
+        new_access = token_data.get("access_token", "")
+        new_refresh_raw = token_data.get("refresh_token")
 
-        token = YouTubeToken(
-            access_token=token_data.get("access_token", ""),
-            refresh_token=new_refresh,
-            client_id=Config.GOOGLE_CLIENT_ID,
-            client_secret=Config.GOOGLE_CLIENT_SECRET,
-            token_expiry=token_expiry,
-        )
-
-        # Run DB calls on the main event loop (Motor requires its own loop)
+        # ALL Motor/DB calls must run on the main bot loop — Motor is bound to it.
+        # This single coroutine handles both the existing-token fetch and the save,
+        # runs on the main loop, and blocks this uvicorn thread until done.
         async def _save():
             from database.db import user_repo
+            # Google only returns refresh_token on first consent — preserve existing
+            if not new_refresh_raw:
+                existing = await user_repo.get_youtube_token(telegram_id)
+                new_refresh = existing.refresh_token if existing else ""
+            else:
+                new_refresh = new_refresh_raw
+
+            token = YouTubeToken(
+                access_token=new_access,
+                refresh_token=new_refresh,
+                client_id=Config.GOOGLE_CLIENT_ID,
+                client_secret=Config.GOOGLE_CLIENT_SECRET,
+                token_expiry=token_expiry,
+            )
             await user_repo.set_youtube_token(telegram_id, token)
             await user_repo.upsert(telegram_id, {"youtube_connected": True})
 
         if _main_loop and _main_loop.is_running():
-            # Schedule DB save on the main bot loop and block the current
-            # thread until it completes — do NOT use run_in_executor here,
-            # as that would attach the future to uvicorn's loop and cause
-            # "Future attached to a different loop" errors.
             future = asyncio.run_coroutine_threadsafe(_save(), _main_loop)
-            future.result(timeout=10)  # blocks uvicorn worker thread, not the loop
+            future.result(timeout=10)  # blocks uvicorn thread, not the loop
         else:
             await _save()
 
-        # FIX #5: notify the user in Telegram that their account is now connected
+        # Fire-and-forget Telegram notification on main loop
         async def _notify():
             try:
                 from core.bot import get_app
